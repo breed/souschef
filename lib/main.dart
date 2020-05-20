@@ -1,28 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'dart:async';
 
 void main() => runApp(SousChefApp());
 
 class SousChefApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'sourdough bread (a couple cooks)',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.deepPurple,
-        // This makes the visual density adapt to the platform that you run
-        // the app on. For desktop platforms, the controls will be smaller and
-        // closer together (more dense) than on mobile platforms.
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: RecipeSteps(title: 'sourdough bread (a couple cooks)'),
@@ -42,46 +31,96 @@ class RecipeSteps extends StatefulWidget {
 class Step {
   Step(var descAndTime) {
     description = descAndTime[0];
-    time = descAndTime[1].toDouble();
+    time = descAndTime[1];
     remaining = time;
   }
   String description;
-  double time;
-  double remaining;
+  int time;
+  int remaining;
   TimeOfDay started;
   TimeOfDay finished;
   Timer timer;
 }
+
 class _RecipeStepsState extends State<RecipeSteps> {
-  var steps = [
-    ['mix flour and water', 60],
-    ['mix sourdough and salt', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-    ['fold', 30],
-  ];
+  static var rawSteps = [];
+  Future<void> setupFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    setupFuture = rootBundle.loadString("assets/recipes/sourdough.md").then((String recipe) {
+      for (var line in recipe.split("\n")) {
+        print("processing ${line}");
+        if (line.startsWith("=>")) {
+          var parts = line.split(" ");
+          int mins = int.parse(parts[1]);
+          String desc = parts.sublist(2).join(" ");
+          rawSteps.add([desc, mins]);
+        }
+      }
+      steps = (rawSteps.map((s) => Step(s))).toList();
+    });
+  }
+
+  var steps;
+
   Duration tickTime = Duration(seconds: 1);
 
   bool checked = false;
+  Timer dialogTimer;
+  int elapsedDialogTime;
 
+  static String dialogTime(elapsedTime) {
+    return
+          "${(elapsedTime~/60).toString().padLeft(2, '0')}:"
+          "${(elapsedTime%60).toString().padLeft(2, '0')}";
+  }
+
+  void _showDialog() {
+    elapsedDialogTime = 0;
+    FlutterRingtonePlayer.play(ios: IosSounds.alarm, android: AndroidSounds.alarm, looping: true);
+    showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(builder: (context, setState) {
+            String timeString = "- ${dialogTime(elapsedDialogTime)}";
+            AlertDialog dialog = createAlertDialog(timeString, context);
+            dialogTimer = dialogTimer != null ? dialogTimer : Timer.periodic(tickTime, (timer) {
+              setState(() {
+                elapsedDialogTime++;
+                print(elapsedDialogTime);
+                timeString = "- ${dialogTime(elapsedDialogTime)}";
+              });
+            });
+            return dialog;
+          });
+        }
+    );
+  }
+
+  AlertDialog createAlertDialog(String timeString, BuildContext context) {
+    var dialog = AlertDialog(
+      title: Text("completed"),
+      content: Text(timeString),
+      actions: [FlatButton(child: Text("dismiss"),
+      onPressed: () {
+        FlutterRingtonePlayer.stop();
+        dialogTimer.cancel();
+        dialogTimer = null;
+        Navigator.of(context).pop();
+      })],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10.0))),
+      elevation: 2.0,
+    );
+    return dialog;
+  }
   @override
   Widget build(BuildContext context) {
-    ListTile makeListTile(Step step) => ListTile(
+    ListTile makeListTile(Step step, bool active) => ListTile(
           contentPadding:
               EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-          leading: Checkbox(value: step.remaining == 0.0,
-          onChanged: (bool) {
-            step.timer = Timer.periodic(tickTime, (timer) { step.remaining--;
-            print(step.remaining);});
-          },),
+          leading: Checkbox(value: step.remaining <= 0.0),
           title: Text(step.description),
           subtitle: Row(children: <Widget>[
             Expanded(
@@ -98,26 +137,52 @@ class _RecipeStepsState extends State<RecipeSteps> {
                     padding: EdgeInsets.only(left: 10.0),
                     child: Text("${step.remaining} mins"))),
           ]),
-          //trailing: Icon(Icons.play_arrow, size: 30.0),
+          trailing: active ? (step.timer == null ? IconButton(icon: Icon(Icons.play_arrow, size: 30.0),
+              onPressed: () =>
+                  step.timer = Timer.periodic(tickTime, (timer) => setState(() {
+                    step.remaining--;
+                    checked = !checked;
+                    if (step.remaining <= 0.0) {
+                      timer.cancel();
+                      step.timer = null;
+                      _showDialog();
+                    }
+                    print(step.remaining);
+                })))
+          : IconButton(icon: Icon(Icons.pause, size: 30.0),
+              onPressed: () => setState(() {
+                step.timer.cancel();
+                step.timer = null;
+              })))
+          : null,
         );
-    Card makeCard(Step step) => Card(
+    Card makeCard(Step step, bool active) => Card(
         elevation: 8.0,
         margin: EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
         child: Container(
           decoration: BoxDecoration(/*color: Colors.amber*/),
-          child: makeListTile(step),
+          child: makeListTile(step, active),
         ));
-    final makeBody = Container(
-        child: ListView.builder(
-      scrollDirection: Axis.vertical,
-      shrinkWrap: true,
-      itemCount: steps.length,
-      itemBuilder: (BuildContext context, int index) =>
-          makeCard(Step(steps[index])),
-    ));
     return Scaffold(
 //      backgroundColor: Colors.blueAccent,
-      body: makeBody,
+      body: FutureBuilder(
+        future: setupFuture,
+        builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
+          if (steps == null) {
+            print("nothing yet");
+            return Text("nothing");
+          }
+          print("got steps ${steps}");
+          return Container(
+              child: ListView.builder(
+                scrollDirection: Axis.vertical,
+                shrinkWrap: true,
+                itemCount: steps.length,
+                itemBuilder: (BuildContext context, int index) =>
+                    makeCard(steps[index],
+                        (steps[index].remaining > 0.0) && (index == 0 || steps[index-1].remaining == 0.0)),
+              ));
+    })
     );
   }
 }

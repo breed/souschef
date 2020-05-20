@@ -1,0 +1,10 @@
+=> 60 mix flour and water, let sit
+=> 30 add sourdough starter, salt, proof
+=> 30 mix with hands, proof
+=> 30 fold dough, proof
+=> 45 fold dough, proof
+=> 90 gently fold dough, proof
+=> 60 shape, proof
+=> 30 preheat 515F dutch oven
+=> 17 place on parchment in dutch oven
+=> 23 place on rack set temp 400F
