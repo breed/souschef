@@ -29,16 +29,20 @@ class RecipeSteps extends StatefulWidget {
 }
 
 class Step {
-  Step(var descAndTime) {
-    description = descAndTime[0];
-    time = descAndTime[1];
-    remaining = time;
+  Step(var descAndTime): this.time = Duration(minutes: descAndTime[1]), this.description = descAndTime[0] {
+    pausedTime = Duration(seconds: 0);
   }
-  String description;
-  int time;
-  int remaining;
-  TimeOfDay started;
-  TimeOfDay finished;
+  final String description;
+  final Duration time;
+  Duration pausedTime;
+  Duration get remaining {
+    if (started == null) {
+      return time;
+    }
+    return time - (DateTime.now().difference(started) - pausedTime);
+  }
+  DateTime started;
+  DateTime finished;
   Timer timer;
 }
 
@@ -46,6 +50,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
   static var rawSteps = [];
   Future<void> setupFuture;
 
+  static String formatDuration(Duration duration) => duration.toString().split(".").first;
   @override
   void initState() {
     super.initState();
@@ -77,7 +82,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
           "${(elapsedTime%60).toString().padLeft(2, '0')}";
   }
 
-  void _showDialog() {
+  void _showDialog(Step step) {
     elapsedDialogTime = 0;
     FlutterRingtonePlayer.play(ios: IosSounds.alarm, android: AndroidSounds.alarm, looping: true);
     showDialog(
@@ -85,7 +90,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
         builder: (BuildContext context) {
           return StatefulBuilder(builder: (context, setState) {
             String timeString = "- ${dialogTime(elapsedDialogTime)}";
-            AlertDialog dialog = createAlertDialog(timeString, context);
+            AlertDialog dialog = createAlertDialog(timeString, context, step);
             dialogTimer = dialogTimer != null ? dialogTimer : Timer.periodic(tickTime, (timer) {
               setState(() {
                 elapsedDialogTime++;
@@ -99,7 +104,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
     );
   }
 
-  AlertDialog createAlertDialog(String timeString, BuildContext context) {
+  AlertDialog createAlertDialog(String timeString, BuildContext context, Step step) {
     var dialog = AlertDialog(
       title: Text("completed"),
       content: Text(timeString),
@@ -108,6 +113,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
         FlutterRingtonePlayer.stop();
         dialogTimer.cancel();
         dialogTimer = null;
+        checked = !checked;
         Navigator.of(context).pop();
       })],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10.0))),
@@ -120,7 +126,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
     ListTile makeListTile(Step step, bool active) => ListTile(
           contentPadding:
               EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-          leading: Checkbox(value: step.remaining <= 0.0),
+          leading: Checkbox(value: step.finished != null),
           title: Text(step.description),
           subtitle: Row(children: <Widget>[
             Expanded(
@@ -128,27 +134,29 @@ class _RecipeStepsState extends State<RecipeSteps> {
                 child: Container(
                     child: LinearProgressIndicator(
                   backgroundColor: Colors.grey,
-                  value: step.remaining/step.time,
-//                  valueColor: AlwaysStoppedAnimation(Colors.green),
+                  value: step.remaining.inSeconds/step.time.inSeconds,
                 ))),
             Expanded(
                 flex: 2,
                 child: Padding(
                     padding: EdgeInsets.only(left: 10.0),
-                    child: Text("${step.remaining} mins"))),
+                    child: Text("${formatDuration(step.remaining)}"))),
           ]),
           trailing: active ? (step.timer == null ? IconButton(icon: Icon(Icons.play_arrow, size: 30.0),
-              onPressed: () =>
+              onPressed: () {
+                  if (step.started == null) {
+                    step.started = DateTime.now();
+                  }
                   step.timer = Timer.periodic(tickTime, (timer) => setState(() {
-                    step.remaining--;
                     checked = !checked;
-                    if (step.remaining <= 0.0) {
+                    if (step.remaining.inSeconds <= 0) {
                       timer.cancel();
                       step.timer = null;
-                      _showDialog();
+                      _showDialog(step);
+                      step.finished = DateTime.now();
                     }
                     print(step.remaining);
-                })))
+                }));})
           : IconButton(icon: Icon(Icons.pause, size: 30.0),
               onPressed: () => setState(() {
                 step.timer.cancel();
@@ -169,10 +177,8 @@ class _RecipeStepsState extends State<RecipeSteps> {
         future: setupFuture,
         builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
           if (steps == null) {
-            print("nothing yet");
-            return Text("nothing");
+            return Text("loading");
           }
-          print("got steps ${steps}");
           return Container(
               child: ListView.builder(
                 scrollDirection: Axis.vertical,
@@ -180,7 +186,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
                 itemCount: steps.length,
                 itemBuilder: (BuildContext context, int index) =>
                     makeCard(steps[index],
-                        (steps[index].remaining > 0.0) && (index == 0 || steps[index-1].remaining == 0.0)),
+                        (steps[index].finished == null) && (index == 0 || steps[index-1].finished != null)),
               ));
     })
     );
