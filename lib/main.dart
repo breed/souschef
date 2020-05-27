@@ -191,23 +191,17 @@ class _RecipeStepsState extends State<RecipeSteps> {
   BuildContext buildContext;
 
   void _startTimer() {
-    try {
-      throw Exception("blah");
-    } catch (e, stack) {
-      print(stack);
-    }
-
     timer = Timer.periodic(
         tickTime,
         (timer) => setState(() {
               checked = !checked;
               print(recipe.steps[activeStep].remaining.inSeconds);
               if (recipe.steps[activeStep].remaining.inSeconds <= 0) {
+                _showDialog(recipe.steps[activeStep], buildContext);
                 timer.cancel();
                 this.timer = null;
                 recipe.steps[activeStep].finish();
                 activeStep++;
-                _showDialog(recipe.steps[activeStep-1], buildContext);
               }
               print(recipe.steps[activeStep].remaining);
             }));
