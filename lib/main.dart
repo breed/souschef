@@ -4,13 +4,16 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'alarm_manager.dart' show AlarmManager;
 import 'dart:async';
 
 void main() => runApp(SousChefApp());
 
 class SousChefApp extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) =>
+      MaterialApp(
         title: 'sourdough bread (a couple cooks)',
         theme: ThemeData(
           primarySwatch: Colors.deepPurple,
@@ -30,9 +33,16 @@ class RecipeSteps extends StatefulWidget {
 }
 
 String formatDuration(Duration duration) =>
-    duration.toString().split(".").first;
+    duration
+        .toString()
+        .split(".")
+        .first;
+
 String formatDateTime(DateTime dateTime) =>
-    dateTime.toString().split(".").first;
+    dateTime
+        .toString()
+        .split(".")
+        .first;
 
 class Step {
   Step(this.recipe, this.index, this.description, this.time);
@@ -43,9 +53,11 @@ class Step {
   final Duration time;
   Duration pausedTime = Duration(seconds: 0);
 
-  Duration get runTime => started == null
-      ? Duration(seconds: 0)
-      : DateTime.now().difference(started) - pausedTime;
+  Duration get runTime =>
+      started == null
+          ? Duration(seconds: 0)
+          : DateTime.now().difference(started) - pausedTime;
+
   Duration get remaining => time - runTime;
 
   DateTime started;
@@ -61,41 +73,45 @@ class Step {
   }
 
   DateTime finished;
+
   String get runInterval =>
-      "${formatDateTime(started)} - ${formatDateTime(finished)}";
+      "${formatDateTime(started)} until ${formatDateTime(finished)}";
   Timer timer;
 }
 
 class PastRecipe {
   PastRecipe(this.startTime, this.recipeName);
+
   DateTime startTime;
+  DateTime finishedTime;
   String recipeName;
-  String toString() => "${recipeName}@${startTime}";
+
+  String toString() => "${recipeName}@${startTime}-${finishedTime}";
 }
 
 class Recipe {
   static Database db;
+
   static Future<void> loadDB() async {
     var dbsPath = await getApplicationDocumentsDirectory();
     var dbPath = join(dbsPath.path, 'history.db');
     db = await openDatabase(
       dbPath,
-      onCreate: (db, version) => db.execute(
-        "CREATE TABLE bakes(ts INTEGER PRIMARY KEY, start INTEGER, recipe TEXT, step INTEGER, note TEXT, state INTEGER)",
-      ),
+      onCreate: (db, version) =>
+          db.execute(
+            "CREATE TABLE bakes(ts INTEGER PRIMARY KEY, start INTEGER, recipe TEXT, step INTEGER, note TEXT, state INTEGER)",
+          ),
       version: 1,
     );
-    print("DATA:");
-    for (var m in await db.query('bakes')) {
-      print(m);
-    }
   }
 
   static const int START_STATE = 0;
   static const int FINISH_STATE = 1;
 
   DateTime startTime = DateTime.now();
+  DateTime finishTime;
   String recipe = "sourdough";
+  String text;
 
   Future<void> logToDB(int step, String note, int state) async {
     var now = DateTime.now();
@@ -111,6 +127,7 @@ class Recipe {
   }
 
   BuildContext buildContext;
+
   Recipe._();
 
   List<Step> steps;
@@ -122,9 +139,14 @@ class Recipe {
     return recipe;
   }
 
+  void finishRecipe() async {
+    await logToDB(-1, "", FINISH_STATE);
+  }
+
   static Future<Recipe> initRecipe() async {
     String text = await rootBundle.loadString("assets/recipes/sourdough.md");
     Recipe recipe = Recipe._();
+    recipe.text = "";
     recipe.steps = List<Step>();
     int index = 0;
     for (var line in text.split("\n")) {
@@ -134,6 +156,8 @@ class Recipe {
         int mins = int.parse(parts[1]);
         String desc = parts.sublist(2).join(" ");
         recipe.steps.add(Step(recipe, index++, desc, Duration(seconds: mins)));
+      } else {
+        recipe.text += line + '\n';
       }
     }
     return recipe;
@@ -141,7 +165,6 @@ class Recipe {
 
   static Future<Recipe> continueRecipe(DateTime startTime) async {
     var startTimeMillis = startTime.millisecondsSinceEpoch;
-    await db.delete('bakes', where: 'start < ?', whereArgs: [startTimeMillis]);
     List<Map> results = await db.query(
       'bakes',
       columns: ['start', 'step', 'ts', 'state'],
@@ -162,6 +185,10 @@ class Recipe {
             recipe.steps[entry['step']].finished = dt;
             break;
         }
+      } else {
+        if (entry['state'] == FINISH_STATE) {
+          recipe.finishTime = DateTime.fromMillisecondsSinceEpoch(entry['ts']);
+        }
       }
     }
     return recipe;
@@ -171,12 +198,31 @@ class Recipe {
     List<PastRecipe> past = List<PastRecipe>();
     List<Map> results = await db.query(
       'bakes',
-      columns: ['start', 'recipe'],
+      columns: ['start', 'recipe', 'ts'],
       orderBy: 'start',
+      where: 'step == -1',
     );
+    Map<int, PastRecipe> map = Map<int, PastRecipe>();
     for (var entry in results) {
-      past.add(PastRecipe(DateTime.fromMillisecondsSinceEpoch(entry['start']),
-          entry['recipe']));
+      int start = entry['start'];
+      int ts = entry['ts'];
+      String recipeName = entry['recipe'];
+      PastRecipe pastRecipe = map[start];
+      if (pastRecipe == null) {
+        pastRecipe = PastRecipe(
+            DateTime.fromMillisecondsSinceEpoch(start),
+            recipeName);
+        map[start] = pastRecipe;
+      }
+      if (ts != start) {
+        pastRecipe.finishedTime = DateTime.fromMillisecondsSinceEpoch(ts);
+      }
+    }
+
+    var keys = map.keys.toList(growable: false);
+    keys.sort((a, b) => a - b);
+    for (var key in keys) {
+      past.add(map[key]);
     }
     print("past: ${past}");
     return past;
@@ -191,53 +237,67 @@ class _RecipeStepsState extends State<RecipeSteps> {
   BuildContext buildContext;
 
   void _startTimer() {
+    AlarmManager.oneShot(recipe.steps[activeStep].remaining, 17, (id) {
+        recipe.steps[activeStep].finish();
+        activeStep++;
+        _showDialog(recipe.steps[activeStep], buildContext);
+        _stopTimer();
+    });
     timer = Timer.periodic(
         tickTime,
-        (timer) => setState(() {
+            (timer) =>
+            setState(() {
               checked = !checked;
               print(recipe.steps[activeStep].remaining.inSeconds);
               if (recipe.steps[activeStep].remaining.inSeconds <= 0) {
-                _showDialog(recipe.steps[activeStep], buildContext);
                 timer.cancel();
                 this.timer = null;
-                recipe.steps[activeStep].finish();
-                activeStep++;
               }
-              print(recipe.steps[activeStep].remaining);
             }));
   }
 
   void _stopTimer() {
-    setState(() {
-      timer.cancel();
-      timer = null;
-    });
+    if (timer != null) {
+      setState(() {
+        timer.cancel();
+        timer = null;
+      });
+    }
   }
 
   @override
   void initState() {
     print("calling initState");
     super.initState();
+    Future<bool> alarmFuture = AlarmManager.init(alarmClock: true,
+        allowWhileIdle: true,
+        exact: true,
+        wakeup: true,
+        rescheduleOnReboot: true);
     Future<Recipe> recipeFuture =
-        Recipe.loadDB().then((value) => Recipe.pastRecipes().then((recipes) {
-              if (recipes.length > 0) {
-                return Recipe.continueRecipe(recipes.last.startTime).then((recipe) {
-                  for (activeStep = 0;
-                      activeStep < recipe.steps.length;
-                      activeStep++) {
-                    if (recipe.steps[activeStep].finished == null) break;
-                  }
-                  if (activeStep < recipe.steps.length &&
-                      recipe.steps[activeStep].started != null) {
-                    _startTimer();
-                  }
-                  return recipe;
-                });
-              } else {
-                return Recipe.startRecipe();
+    Recipe.loadDB().then((value) =>
+        Recipe.pastRecipes().then((recipes) {
+          if (recipes.length > 0 && recipes.last.finishedTime == null) {
+            return Recipe.continueRecipe(recipes.last.startTime)
+                .then((recipe) {
+              for (activeStep = 0;
+              activeStep < recipe.steps.length;
+              activeStep++) {
+                if (recipe.steps[activeStep].finished == null) break;
               }
-            }));
-    setupFuture = recipeFuture.then((Recipe recipe) => this.recipe = recipe);
+              if (activeStep < recipe.steps.length &&
+                  recipe.steps[activeStep].started != null) {
+                _startTimer();
+              }
+              return recipe;
+            });
+          } else {
+            return Recipe.startRecipe();
+          }
+        }));
+    setupFuture = alarmFuture.then((v) =>
+        recipeFuture.then((Recipe recipe) => this.recipe = recipe).then(
+                (recipe) => this.recipe = recipe));
   }
 
   Duration tickTime = Duration(seconds: 1);
@@ -248,7 +308,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
 
   static String dialogTime(elapsedTime) =>
       "${(elapsedTime ~/ 60).toString().padLeft(2, '0')}:"
-      "${(elapsedTime % 60).toString().padLeft(2, '0')}";
+          "${(elapsedTime % 60).toString().padLeft(2, '0')}";
 
   void _showDialog(Step step, BuildContext buildContext) {
     elapsedDialogTime = 0;
@@ -263,19 +323,18 @@ class _RecipeStepsState extends State<RecipeSteps> {
             dialogTimer = dialogTimer != null
                 ? dialogTimer
                 : Timer.periodic(tickTime, (timer) {
-                    setState(() {
-                      elapsedDialogTime++;
-                      print(elapsedDialogTime);
-                      timeString = "- ${dialogTime(elapsedDialogTime)}";
-                    });
-                  });
+              setState(() {
+                elapsedDialogTime++;
+                timeString = "- ${dialogTime(elapsedDialogTime)}";
+              });
+            });
             return dialog;
           });
         });
   }
 
-  AlertDialog createAlertDialog(
-          String timeString, BuildContext context, Step step) =>
+  AlertDialog createAlertDialog(String timeString, BuildContext context,
+      Step step) =>
       AlertDialog(
         title: Text("completed"),
         content: Text(timeString),
@@ -296,9 +355,10 @@ class _RecipeStepsState extends State<RecipeSteps> {
       );
 
   Container constructStepList(BuildContext buildContext) {
-    ListTile makeListTile(Step step, bool active) => ListTile(
+    ListTile makeListTile(Step step, bool active) =>
+        ListTile(
           contentPadding:
-              EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+          EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
           leading: Checkbox(
             value: step.finished != null,
             onChanged: (value) => print(value),
@@ -310,51 +370,63 @@ class _RecipeStepsState extends State<RecipeSteps> {
                 child: Container(
                     child: step.remaining.inSeconds > 0
                         ? LinearProgressIndicator(
-                            backgroundColor: Colors.grey,
-                            value:
-                                step.remaining.inSeconds / step.time.inSeconds,
-                          )
+                      backgroundColor: Colors.grey,
+                      value:
+                      step.remaining.inSeconds / step.time.inSeconds,
+                    )
                         : Text("${step.runInterval}"))),
             Expanded(
                 flex: 2,
                 child: Padding(
                     padding: EdgeInsets.only(left: 10.0),
-                    child: Text("${formatDuration(step.remaining)}"))),
+                    child: Text((step.remaining.inSeconds) < 0
+                        ? "${formatDuration(step.time)}"
+                        : "${formatDuration(step.remaining)}"))),
           ]),
-          trailing: step.index == activeStep
-              ? (timer == null
-                  ? IconButton(
-                      icon: Icon(Icons.play_arrow, size: 30.0),
-                      onPressed: () {
-                        print(step.started);
-                        if (step.started == null) {
-                          step.start();
-                        }
-                        _startTimer();
-                      })
-                  : IconButton(
-                      icon: Icon(Icons.pause, size: 30.0),
-                      onPressed: () => _stopTimer))
+          trailing: step.index == activeStep && timer == null ?
+          IconButton(
+              icon: Icon(Icons.play_arrow, size: 30.0),
+              onPressed: () {
+                print(step.started);
+                if (step.started == null) {
+                  step.start();
+                }
+                _startTimer();
+              })
               : null,
         );
-    Card makeCard(Step step, bool active) => Card(
-        elevation: 8.0,
-        margin: EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-        child: Container(
-          decoration: BoxDecoration(/*color: Colors.amber*/),
-          child: makeListTile(step, active),
-        ));
-    print("timer is ${timer}");
+    Card makeCard(Step step, bool active) =>
+        Card(
+            elevation: 8.0,
+            margin: EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+            child: Container(
+              decoration: BoxDecoration(/*color: Colors.amber*/),
+              child: makeListTile(step, active),
+            ));
     return Container(
         child: ListView.builder(
-      scrollDirection: Axis.vertical,
-      shrinkWrap: true,
-      itemCount: recipe.steps.length,
-      itemBuilder: (BuildContext context, int index) => makeCard(
-          recipe.steps[index],
-          (recipe.steps[index].finished == null) &&
-              (index == 0 || recipe.steps[index - 1].finished != null)),
-    ));
+          scrollDirection: Axis.vertical,
+          shrinkWrap: true,
+          itemCount: recipe.steps.length + 2,
+          itemBuilder: (BuildContext context, int index) {
+            if (index == 0) {
+              return Markdown(data: recipe.text, shrinkWrap: true,);
+            }
+            index--;
+            if (index == recipe.steps.length) {
+              return RaisedButton(onPressed: () =>
+                  Recipe.startRecipe().then((r) {
+                    this.activeStep = 0;
+                    _stopTimer();
+                    setState(() => this.recipe = r);
+                  }), child: Text("start new bake"));
+            }
+            return makeCard(
+                recipe.steps[index],
+                (recipe.steps[index].finished == null) &&
+                    (index == 0 || recipe.steps[index - 1].finished != null));
+          },
+        ));
   }
 
   @override
