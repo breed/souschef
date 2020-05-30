@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:android_intent/android_intent.dart';
 import 'dart:async';
+import 'dart:io';
 
 void scheduleAlarm(int seconds, String message) async {
   var intent =
@@ -45,8 +46,9 @@ class RecipeSteps extends StatefulWidget {
 String formatDuration(Duration duration) =>
     duration.toString().split(".").first;
 
-String formatDateTime(DateTime dateTime) =>
-    dateTime.toString().split(".").first;
+String formatDateTime(DateTime dateTime) => dateTime.year == DateTime.now().year
+    ? dateTime.toString().split(".").first.substring(4)
+    : dateTime.toString().split(".").first;
 
 class Step {
   Step(this.recipe, this.index, this.prev, this.description, this.time);
@@ -57,6 +59,7 @@ class Step {
   Step next;
   final String description;
   final Duration time;
+  bool alarmScheduled = false;
   Duration pausedTime = Duration(seconds: 0);
 
   Duration get runTime => started == null
@@ -75,7 +78,11 @@ class Step {
   void finish() {
     finished = DateTime.now();
     recipe.logToDB(index, "", Recipe.FINISH_STATE);
-    if (next != null && next.started == null) next.start();
+    if (next != null) {
+      if (next.started == null) next.start();
+    } else {
+      recipe.finishRecipe();
+    }
   }
 
   DateTime finished;
@@ -117,7 +124,7 @@ class Recipe {
   static const int START_STATE = 0;
   static const int FINISH_STATE = 1;
 
-  DateTime startTime = DateTime.now();
+  DateTime startTime;
   DateTime finishTime;
   String recipe = "sourdough";
   String text;
@@ -133,6 +140,8 @@ class Recipe {
       'state': state,
     };
     db.insert('bakes', entry);
+    /* the timestamp needs to be unique, so wait a bit to ensure that happens */
+    sleep(Duration(milliseconds: 2));
   }
 
   BuildContext buildContext;
@@ -162,12 +171,13 @@ class Recipe {
 
   static Future<Recipe> startRecipe() async {
     Recipe recipe = await initRecipe();
-
+    recipe.startTime = DateTime.now();
     await recipe.logToDB(-1, "", START_STATE);
     return recipe;
   }
 
   void finishRecipe() async {
+    print("***** FINISHING RECIPE *****");
     await logToDB(-1, "", FINISH_STATE);
   }
 
@@ -184,8 +194,10 @@ class Recipe {
         var parts = line.split(" ");
         int mins = int.parse(parts[1]);
         String desc = parts.sublist(2).join(" ");
-        recipe.steps.add(Step(recipe, index, prev, desc, Duration(minutes: mins)));
-        if (index > 0) recipe.steps[index-1].next = recipe.steps[index];
+        var step = Step(recipe, index, prev, desc, Duration(minutes: mins));
+        prev = step;
+        recipe.steps.add(step);
+        if (index > 0) recipe.steps[index - 1].next = recipe.steps[index];
         index++;
       } else {
         recipe.text += line + '\n';
@@ -196,10 +208,10 @@ class Recipe {
 
   static Future<Recipe> continueRecipe(DateTime startTime) async {
     var startTimeMillis = startTime.millisecondsSinceEpoch;
-    List<Map> results = await db.query(
-      'bakes',
-      columns: ['start', 'step', 'ts', 'state'],
-    );
+    List<Map> results = await db.query('bakes',
+        columns: ['start', 'step', 'ts', 'state'],
+        where: 'start = ?',
+        whereArgs: [startTime.millisecondsSinceEpoch]);
     Recipe recipe = await initRecipe();
     recipe.startTime = startTime;
     print("continuing recipe from ${startTimeMillis}");
@@ -226,10 +238,11 @@ class Recipe {
   }
 
   static Future<List<PastRecipe>> pastRecipes() async {
+    print("loading past recipes");
     List<PastRecipe> past = List<PastRecipe>();
     List<Map> results = await db.query(
       'bakes',
-      columns: ['start', 'recipe', 'ts'],
+      columns: ['start', 'recipe', 'ts', 'state', 'step'],
       orderBy: 'start',
       where: 'step == -1',
     );
@@ -244,7 +257,8 @@ class Recipe {
             PastRecipe(DateTime.fromMillisecondsSinceEpoch(start), recipeName);
         map[start] = pastRecipe;
       }
-      if (ts != start) {
+      if (entry['state'] == FINISH_STATE) {
+        print("setting finished on ${pastRecipe}: $entry");
         pastRecipe.finishedTime = DateTime.fromMillisecondsSinceEpoch(ts);
       }
     }
@@ -254,7 +268,7 @@ class Recipe {
     for (var key in keys) {
       past.add(map[key]);
     }
-    print("past: ${past}");
+    print("returning past");
     return past;
   }
 }
@@ -269,6 +283,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
     super.initState();
     Future<Recipe> recipeFuture =
         Recipe.loadDB().then((value) => Recipe.pastRecipes().then((recipes) {
+              print("got recipe: ${recipes}");
               if (recipes.length > 0 && recipes.last.finishedTime == null) {
                 return Recipe.continueRecipe(recipes.last.startTime)
                     .then((recipe) {
@@ -291,25 +306,38 @@ class _RecipeStepsState extends State<RecipeSteps> {
     ListTile makeListTile(Step step, bool active) => ListTile(
           contentPadding:
               EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-          leading: Checkbox(
-            value: step.finished != null,
-            onChanged: (value) {
-              if (value && (step.prev == null || step.prev.finished != null)) {
-                step.finish();
-                setState(() {});
-              }
-            },
-          ),
+          leading: step.index == 0 && step.started == null
+              ? IconButton(
+                  icon: Icon(Icons.play_arrow, size: 30.0),
+                  onPressed: () {
+                    step.start();
+                    setState(() {});
+                  })
+              : Checkbox(
+                  value: step.finished != null,
+                  onChanged: (value) {
+                    print("step.prev == ${step.prev}");
+                    if (value &&
+                        (step.prev == null || step.prev.finished != null)) {
+                      step.finish();
+                      setState(() {});
+                    }
+                  },
+                ),
           title: Text(step.description),
           subtitle: Text("${step.runInterval}"),
           trailing: step.finished == null &&
                   (step.index == 0 ||
                       recipe.steps[step.index - 1].finished != null)
-              ? IconButton(
-                  icon: Icon(Icons.alarm_add, size: 30.0),
-                  onPressed: () {
-                    scheduleAlarm(step.time.inSeconds, "${step.description}");
-                  })
+              ? (step.alarmScheduled
+                  ? Icon(Icons.hourglass_full)
+                  : IconButton(
+                      icon: Icon(Icons.alarm_add, size: 30.0),
+                      onPressed: () {
+                        scheduleAlarm(
+                            step.time.inSeconds, "${step.description}");
+                        setState(() => step.alarmScheduled = false);
+                      }))
               : null,
         );
     Card makeCard(Step step, bool active) => Card(
