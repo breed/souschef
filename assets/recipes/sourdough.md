@@ -5,7 +5,7 @@ this recipes was derived from a couple of cooks excellent recipe.
 ## ingredients
 * 400 grams all purpose or bread flour
 * 50 grams whole wheat flour
-* 200 grams water, room temperature
+* 350 grams water, room temperature
 * 150 grams milk
 * 80 grams active sourdough
 * 10 grams salt

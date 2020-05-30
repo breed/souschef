@@ -131,6 +131,23 @@ class Recipe {
   Recipe._();
 
   List<Step> steps;
+  int activeStepIndex = 0;
+
+  void findActiveStep() {
+    for (activeStepIndex = 0; activeStepIndex < steps.length; activeStepIndex++) {
+      if (activeStep.started != null && activeStep.finished == null) break;
+    }
+    if (activeStep == null) {
+      // this means we haven't started so set the first step as active.
+      activeStepIndex = 0;
+    }
+  }
+  void advanceStep() => activeStepIndex++;
+
+  Step get activeStep =>
+      activeStepIndex < steps.length && activeStepIndex >= 0 ?
+      steps[activeStepIndex] :
+          null;
 
   static Future<Recipe> startRecipe() async {
     Recipe recipe = await initRecipe();
@@ -233,14 +250,10 @@ class _RecipeStepsState extends State<RecipeSteps> {
   Future<Recipe> setupFuture;
   Recipe recipe;
   Timer timer;
-  int activeStep;
   BuildContext buildContext;
 
   void _startTimer() {
-    AlarmManager.oneShot(recipe.steps[activeStep].remaining, 17, (id) {
-        recipe.steps[activeStep].finish();
-        activeStep++;
-        _showDialog(recipe.steps[activeStep], buildContext);
+    AlarmManager.oneShot(recipe.activeStep.remaining, 17, (id) {
         _stopTimer();
     });
     timer = Timer.periodic(
@@ -248,8 +261,11 @@ class _RecipeStepsState extends State<RecipeSteps> {
             (timer) =>
             setState(() {
               checked = !checked;
-              print(recipe.steps[activeStep].remaining.inSeconds);
-              if (recipe.steps[activeStep].remaining.inSeconds <= 0) {
+              print(recipe.activeStep.remaining.inSeconds);
+              if (recipe.activeStep.remaining.inSeconds <= 0) {
+                recipe.activeStep.finish();
+                _showDialog(recipe.activeStep, buildContext);
+                recipe.advanceStep();
                 timer.cancel();
                 this.timer = null;
               }
@@ -280,15 +296,11 @@ class _RecipeStepsState extends State<RecipeSteps> {
           if (recipes.length > 0 && recipes.last.finishedTime == null) {
             return Recipe.continueRecipe(recipes.last.startTime)
                 .then((recipe) {
-              for (activeStep = 0;
-              activeStep < recipe.steps.length;
-              activeStep++) {
-                if (recipe.steps[activeStep].finished == null) break;
-              }
-              if (activeStep < recipe.steps.length &&
-                  recipe.steps[activeStep].started != null) {
-                _startTimer();
-              }
+                  if (recipe.activeStep != null &&
+                  recipe.activeStep.started != null &&
+                  recipe.activeStep.finished == null) {
+                    _startTimer();
+                  }
               return recipe;
             });
           } else {
@@ -383,7 +395,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
                         ? "${formatDuration(step.time)}"
                         : "${formatDuration(step.remaining)}"))),
           ]),
-          trailing: step.index == activeStep && timer == null ?
+          trailing: step == recipe.activeStep && step.started == null && timer == null ?
           IconButton(
               icon: Icon(Icons.play_arrow, size: 30.0),
               onPressed: () {
@@ -416,7 +428,6 @@ class _RecipeStepsState extends State<RecipeSteps> {
             if (index == recipe.steps.length) {
               return RaisedButton(onPressed: () =>
                   Recipe.startRecipe().then((r) {
-                    this.activeStep = 0;
                     _stopTimer();
                     setState(() => this.recipe = r);
                   }), child: Text("start new bake"));
