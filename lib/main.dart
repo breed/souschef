@@ -18,6 +18,8 @@ import 'dart:io';
  *    => 60 mix flour, water and milk, let sit
  *    will be interpreted as a step that has a 60 minute timer associated with
  *    it and the description "mix flour, water and milk, let sit"
+ *    if the time has an * in front of it, an alarm will automatically be set:
+ *    => *17 bake for at 515 degrees
  *
  * a "bakes" sqllite DB holds the state of instances of the recipe. each
  * instance is uniquely identified by the time the recipe was started. the
@@ -67,23 +69,24 @@ class RecipeSteps extends StatefulWidget {
   _RecipeStepsState createState() => _RecipeStepsState(title);
 }
 
-String formatDuration(Duration duration) =>
-    duration.toString().split(".").first;
+String formatDuration(Duration duration) => duration.inMinutes > 90
+    ? "${(duration.inMinutes / 60).toStringAsPrecision(2)} hours"
+    : "${duration.inMinutes} mins";
 
-String formatDateTime(DateTime dateTime) => dateTime.year == DateTime.now().year
-    ? dateTime.toString().split(".").first.substring(4)
-    : dateTime.toString().split(".").first;
+String formatDateTime(DateTime dateTime) =>
+    "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
 
 class Step {
-  Step(this.recipe, this.index, this.description, this.time);
+  Step(this.recipe, this.index, this.description, this.time, this.autoSetTimer);
 
   final Recipe recipe;
   final int index; // step number
   final String description; // from markdown
   final Duration time; // from markdown
+  final bool autoSetTimer; // from markdown
   DateTime started; // from DB (null if not set)
   DateTime finished; // from DB (null if not set)
-  bool alarmScheduled = false; // transient (not from DB)
+  bool timerSet = false; // transient (not from DB)
   Step get prev => index == 0 ? null : recipe.steps[index - 1];
   Step get next =>
       index == recipe.steps.length - 1 ? null : recipe.steps[index + 1];
@@ -91,6 +94,10 @@ class Step {
   void start() {
     started = DateTime.now();
     recipe.logToDB(index, Recipe.START_STATE);
+    if (autoSetTimer) {
+      scheduleAlarm(time.inSeconds, description);
+      timerSet = true;
+    }
   }
 
   void finish() {
@@ -98,18 +105,23 @@ class Step {
     recipe.logToDB(index, Recipe.FINISH_STATE);
     if (next != null) {
       if (next.started == null) next.start();
+      recipe.advanceStep();
     } else {
       recipe.finishRecipe();
     }
   }
 
-  String get runInterval => started == null
-      ? "not started. takes ${formatDuration(time)}"
-      : finished == null
-          ? "estimated ${formatDateTime(started)} to ${formatDateTime(started.add(time))}"
-          : finished == started
-              ? "completed ${formatDateTime(started)}"
-              : "${formatDateTime(started)} to ${formatDateTime(finished)}";
+  DateTime get willFinish => finished != null
+      ? finished
+      : started != null
+          ? started.add(time)
+          : prev == null ? DateTime.now().add(time) : prev.willFinish.add(time);
+  DateTime get willStart => started != null
+      ? started
+      : prev == null ? DateTime.now() : prev.willFinish;
+
+  String get runInterval =>
+      "takes: ${formatDuration(time)} ${formatDateTime(willStart)} to ${formatDateTime(willFinish)}";
 }
 
 class PastRecipe {
@@ -201,9 +213,16 @@ class Recipe {
     for (var line in text.split("\n")) {
       if (line.startsWith("=>")) {
         var parts = line.split(" ");
-        int mins = int.parse(parts[1]);
+        String timerDuration = parts[1];
+        bool autoSetTimer = false;
+        if (timerDuration.substring(0, 1) == "*") {
+          timerDuration = timerDuration.substring(1);
+          autoSetTimer = true;
+        }
+        int mins = int.parse(timerDuration);
         String desc = parts.sublist(2).join(" ");
-        var step = Step(recipe, index, desc, Duration(minutes: mins));
+        var step =
+            Step(recipe, index, desc, Duration(minutes: mins), autoSetTimer);
         recipe.steps.add(step);
         index++;
       } else {
@@ -327,14 +346,14 @@ class _RecipeStepsState extends State<RecipeSteps> {
           trailing: step.finished == null &&
                   (step.index == 0 ||
                       recipe.steps[step.index - 1].finished != null)
-              ? (step.alarmScheduled
+              ? (step.timerSet
                   ? Icon(Icons.hourglass_full)
                   : IconButton(
                       icon: Icon(Icons.alarm_add, size: 30.0),
                       onPressed: () {
                         scheduleAlarm(
                             step.time.inSeconds, "${step.description}");
-                        step.alarmScheduled = true;
+                        step.timerSet = true;
                         setState(() {});
                       }))
               : null,
