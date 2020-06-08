@@ -45,6 +45,11 @@ void scheduleAlarm(int seconds, String message) async =>
       "android.intent.extra.alarm.SKIP_UI": true
     }).launch();
 
+String trimFirstWord(String words) =>
+    words.replaceFirst(RegExp(r'\s*[^\s]+\s*'), "");
+String extractFirstWord(String words) =>
+    RegExp(r'\s*[^\s]+\s*').stringMatch(words);
+
 void main() => runApp(SousChefApp());
 
 class SousChefApp extends StatelessWidget {
@@ -73,8 +78,11 @@ String formatDuration(Duration duration) => duration.inMinutes > 90
     ? "${(duration.inMinutes / 60).toStringAsPrecision(2)} hours"
     : "${duration.inMinutes} mins";
 
-String formatDateTime(DateTime dateTime) =>
-    "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
+String formatDateTime(DateTime dateTime) => dateTime.hour == 0
+    ? "12:${dateTime.minute.toString().padLeft(2, '0')}a"
+    : dateTime.hour > 12
+        ? "${dateTime.hour - 12}:${dateTime.minute.toString().padLeft(2, '0')}p"
+        : "${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}a";
 
 class Step {
   Step(this.recipe, this.index, this.description, this.time, this.autoSetTimer);
@@ -111,6 +119,8 @@ class Step {
     }
   }
 
+  DateTime get plannedFinish =>
+      prev == null ? willStart.add(time) : prev.plannedFinish.add(time);
   DateTime get willFinish => finished != null
       ? finished
       : started != null
@@ -120,8 +130,11 @@ class Step {
       ? started
       : prev == null ? DateTime.now() : prev.willFinish;
 
-  String get runInterval =>
-      "takes: ${formatDuration(time)} ${formatDateTime(willStart)} to ${formatDateTime(willFinish)}";
+  String get durationString =>
+      time.inSeconds > 0 ? "${formatDuration(time)}" : "";
+  String get runInterval => time.inSeconds > 0
+      ? "${formatDateTime(willStart)} to ${formatDateTime(willFinish)} planned ${formatDateTime(plannedFinish)}"
+      : "";
 }
 
 class PastRecipe {
@@ -212,17 +225,18 @@ class Recipe {
     int index = 0;
     for (var line in text.split("\n")) {
       if (line.startsWith("=>")) {
-        var parts = line.split(" ");
-        String timerDuration = parts[1];
+        line = trimFirstWord(line);
+        int mins = 0;
         bool autoSetTimer = false;
-        if (timerDuration.substring(0, 1) == "*") {
-          timerDuration = timerDuration.substring(1);
-          autoSetTimer = true;
+        var firstChar = line.substring(0, 1);
+        String desc = line;
+        if (firstChar == "*" || firstChar == "+") {
+          mins = int.parse(extractFirstWord(line.substring(1)));
+          desc = trimFirstWord(line);
+          autoSetTimer = firstChar == "*";
         }
-        int mins = int.parse(timerDuration);
-        String desc = parts.sublist(2).join(" ");
-        var step =
-            Step(recipe, index, desc, Duration(minutes: mins), autoSetTimer);
+        var step = Step(
+            recipe, index, desc.trim(), Duration(minutes: mins), autoSetTimer);
         recipe.steps.add(step);
         index++;
       } else {
@@ -341,7 +355,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
                     }
                   },
                 ),
-          title: Text(step.description),
+          title: Text("${step.description} ${step.durationString}"),
           subtitle: Text("${step.runInterval}"),
           trailing: step.finished == null &&
                   (step.index == 0 ||
