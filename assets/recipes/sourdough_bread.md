@@ -1,4 +1,4 @@
-# sourdough hacked
+# sourdough bread hacked
 
 this recipes was derived from a couple of cooks excellent recipe.
 
