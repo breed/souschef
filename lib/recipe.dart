@@ -1,9 +1,10 @@
+import 'dart:io';
+
+import 'package:android_intent/android_intent.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:android_intent/android_intent.dart';
-import 'dart:io';
 
 void scheduleAlarm(int seconds, String message) async =>
     await AndroidIntent(action: "android.intent.action.SET_TIMER", arguments: {
@@ -14,8 +15,9 @@ void scheduleAlarm(int seconds, String message) async =>
 
 String trimFirstWord(String words) =>
     words.replaceFirst(RegExp(r'\s*[^\s]+\s*'), "");
+
 String extractFirstWord(String words) =>
-    RegExp(r'\s*[^\s]+\s*').stringMatch(words);
+    RegExp(r'\s*[^\s]+\s*').stringMatch(words).trim();
 
 String formatDuration(Duration duration) => duration.inMinutes > 90
     ? "${(duration.inMinutes / 60).toStringAsPrecision(2)} hours"
@@ -24,12 +26,11 @@ String formatDuration(Duration duration) => duration.inMinutes > 90
 String formatDateTime(DateTime dateTime) => dateTime.hour == 0
     ? "12:${dateTime.minute.toString().padLeft(2, '0')}a"
     : dateTime.hour > 12
-        ? "${dateTime.hour - 12}:${dateTime.minute.toString().padLeft(2, '0')}p"
-        : "${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}a";
+    ? "${dateTime.hour - 12}:${dateTime.minute.toString().padLeft(2, '0')}p"
+    : "${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}a";
 
 class RecipeStep {
-  RecipeStep(
-      this.recipe, this.index, this.description, this.time, this.autoSetTimer);
+  RecipeStep(this.recipe, this.index, this.description, this.time, this.autoSetTimer);
 
   final Recipe recipe;
   final int index; // step number
@@ -40,6 +41,7 @@ class RecipeStep {
   DateTime finished; // from DB (null if not set)
   bool timerSet = false; // transient (not from DB)
   RecipeStep get prev => index == 0 ? null : recipe.steps[index - 1];
+
   RecipeStep get next =>
       index == recipe.steps.length - 1 ? null : recipe.steps[index + 1];
 
@@ -65,18 +67,21 @@ class RecipeStep {
 
   DateTime get plannedFinish =>
       prev == null ? willStart.add(time) : prev.plannedFinish.add(time);
+
   DateTime get willFinish => finished != null
       ? finished
       : started != null
           ? started.add(time)
           : prev == null ? DateTime.now().add(time) : prev.willFinish.add(time);
+
   DateTime get willStart => started != null
       ? started
       : prev == null ? DateTime.now() : prev.willFinish;
 
   String get durationString =>
       time.inSeconds > 0 ? "${formatDuration(time)}" : "";
-  String get runInterval => time.inSeconds > 0
+
+  String get runInterval => time.inSeconds > 0 || finished != null
       ? "${formatDateTime(willStart)} to ${formatDateTime(willFinish)} planned ${formatDateTime(plannedFinish)}"
       : "";
 }
@@ -95,13 +100,13 @@ class Recipe {
   static Database db;
 
   static Future<void> loadDB() async => db = await openDatabase(
-        join((await getApplicationDocumentsDirectory()).path, 'history.db'),
-        onCreate: (db, version) => db.execute(
-          "CREATE TABLE "
+    join((await getApplicationDocumentsDirectory()).path, 'history.db'),
+    onCreate: (db, version) => db.execute(
+      "CREATE TABLE "
           "bakes(ts INTEGER PRIMARY KEY, start INTEGER, recipe TEXT, step INTEGER, state INTEGER)",
-        ),
-        version: 1,
-      );
+    ),
+    version: 1,
+  );
 
   static const int START_STATE = 0;
   static const int FINISH_STATE = 1;
@@ -132,8 +137,8 @@ class Recipe {
 
   void findActiveStep() {
     for (activeStepIndex = 0;
-        activeStepIndex < steps.length;
-        activeStepIndex++) {
+    activeStepIndex < steps.length;
+    activeStepIndex++) {
       if (activeStep.started != null && activeStep.finished == null) break;
     }
     if (activeStep == null) {
@@ -164,7 +169,7 @@ class Recipe {
 
   static List<List<String>> recipeList = [];
 
-  static void loadList() async {
+  static Future<void> loadList() async {
     String list = await rootBundle.loadString("assets/recipes/list");
     for (var line in list.split("\n")) {
       var fname = extractFirstWord(line);
@@ -177,8 +182,7 @@ class Recipe {
   static Future<Recipe> initRecipe(String recipeName) async {
     var recipeFileName = "assets/recipes/${recipeName}";
     if (!recipeFileName.endsWith(".md")) recipeFileName += ".md";
-    String text =
-        await rootBundle.loadString(recipeFileName);
+    String text = await rootBundle.loadString(recipeFileName);
     Recipe recipe = Recipe._(recipeName);
     recipe.text = "";
     recipe.steps = List<RecipeStep>();

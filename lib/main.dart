@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:souschef/recipe_list.dart';
-import 'dart:async';
+
 import 'recipe.dart';
 
 /**
@@ -45,14 +46,14 @@ void main() async {
 class SousChefApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'sous chef',
-        theme: ThemeData(
-          primarySwatch: Colors.deepPurple,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        // hardcoded for now, but hopefully there will be more in the future
-        home: RecipeSteps(title: 'sourdough_bread.md'),
-      );
+    title: 'sous chef',
+    theme: ThemeData(
+      primarySwatch: Colors.deepPurple,
+      visualDensity: VisualDensity.adaptivePlatformDensity,
+    ),
+    // hardcoded for now, but hopefully there will be more in the future
+    home: RecipeSteps(title: 'sourdough_bread.md'),
+  );
 }
 
 class RecipeSteps extends StatefulWidget {
@@ -85,16 +86,16 @@ class _RecipeStepsState extends State<RecipeSteps> {
   void initState() {
     super.initState();
     Future<Recipe> recipeFuture =
-        Recipe.loadDB().then((value) => Recipe.pastRecipes().then((recipes) {
-              if (recipes.length > 0 && recipes.last.finishedTime == null) {
-                return Recipe.continueRecipe(recipes.last.startTime)
-                    .then((recipe) {
-                  return recipe;
-                });
-              } else {
-                return Recipe.startRecipe(recipeName);
-              }
-            }));
+    Recipe.loadDB().then((value) => Recipe.pastRecipes().then((recipes) {
+      if (recipes.length > 0 && recipes.last.finishedTime == null) {
+        return Recipe.continueRecipe(recipes.last.startTime)
+            .then((recipe) {
+          return recipe;
+        });
+      } else {
+        return Recipe.startRecipe(recipeName);
+      }
+    }));
     setupFuture = recipeFuture
         .then((Recipe recipe) => this.recipe = recipe)
         .then((recipe) => this.recipe = recipe);
@@ -103,17 +104,17 @@ class _RecipeStepsState extends State<RecipeSteps> {
   Container constructStepList() {
     /* make a step tile */
     ListTile makeListTile(RecipeStep step, bool active) => ListTile(
-          contentPadding:
-              EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-          leading: step.index == 0 && step.started == null
-              ? IconButton(
-                  icon: Icon(Icons.play_arrow, size: 30.0),
-                  onPressed: () {
-                    step.start();
-                    setState(() {});
-                  })
-              : Checkbox(
-                  value: step.finished != null,
+      contentPadding:
+      EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+      leading: step.index == 0 && step.started == null
+          ? IconButton(
+          icon: Icon(Icons.play_arrow, size: 30.0),
+          onPressed: () {
+            step.start();
+            setState(() {});
+          })
+          : Checkbox(
+        value: step.finished != null,
                   onChanged: (value) {
                     if (value &&
                         (step.prev == null || step.prev.finished != null)) {
@@ -124,7 +125,8 @@ class _RecipeStepsState extends State<RecipeSteps> {
                 ),
           title: Text("${step.description} ${step.durationString}"),
           subtitle: Text("${step.runInterval}"),
-          trailing: step.finished == null &&
+          trailing: step.time.inSeconds > 0 &&
+                  step.finished == null &&
                   (step.index == 0 ||
                       recipe.steps[step.index - 1].finished != null)
               ? (step.timerSet
@@ -136,9 +138,9 @@ class _RecipeStepsState extends State<RecipeSteps> {
                             step.time.inSeconds, "${step.description}");
                         step.timerSet = true;
                         setState(() {});
-                      }))
-              : null,
-        );
+          }))
+          : null,
+    );
     Card makeCard(RecipeStep step, bool active) => Card(
         elevation: 8.0,
         margin: EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
@@ -152,32 +154,34 @@ class _RecipeStepsState extends State<RecipeSteps> {
      * the item index to know the actual (zero-based) step we are on. */
     return Container(
         child: ListView.builder(
-      scrollDirection: Axis.vertical,
-      shrinkWrap: true,
-      itemCount: recipe.steps.length + 2,
-      itemBuilder: (BuildContext context, int index) {
-        if (index == 0)
-          return Markdown(
-            data: recipe.text,
-            shrinkWrap: true,
-          );
-        index--;
-        if (index == recipe.steps.length) {
-          return RaisedButton(
-              onPressed: () => _showSelectionDialog(context).then(
-                  (recipeName) => Recipe.startRecipe(recipeName)
-                      .then((r) => setState(() {
-                  this.recipe = r;
-                  print("starting recipe $r");
-                  }))),
-              child: Text("start new bake"));
-        }
-        return makeCard(
-            recipe.steps[index],
-            (recipe.steps[index].finished == null) &&
-                (index == 0 || recipe.steps[index - 1].finished != null));
-      },
-    ));
+          scrollDirection: Axis.vertical,
+          shrinkWrap: true,
+          itemCount: recipe.steps.length + 2,
+          itemBuilder: (BuildContext context, int index) {
+            if (index == 0)
+              return Markdown(
+                data: recipe.text,
+                shrinkWrap: true,
+              );
+            index--;
+            if (index == recipe.steps.length) {
+              return RaisedButton(
+                  onPressed: () =>
+                      _showSelectionDialog(context).then(
+                              (recipeName) =>
+                              Recipe.startRecipe(recipeName).then((r) =>
+                                  setState(() {
+                                    this.recipe = r;
+                                    print("starting recipe $r");
+                                  }))),
+                  child: Text("start new bake"));
+            }
+            return makeCard(
+                recipe.steps[index],
+                (recipe.steps[index].finished == null) &&
+                    (index == 0 || recipe.steps[index - 1].finished != null));
+          },
+        ));
   }
 
   @override
