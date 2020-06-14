@@ -47,13 +47,13 @@ class SousChefApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'sous chef',
-    theme: ThemeData(
-      primarySwatch: Colors.deepPurple,
-      visualDensity: VisualDensity.adaptivePlatformDensity,
-    ),
-    // hardcoded for now, but hopefully there will be more in the future
-    home: RecipeSteps(title: 'sourdough_bread.md'),
-  );
+        theme: ThemeData(
+          primarySwatch: Colors.deepPurple,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
+        // hardcoded for now, but hopefully there will be more in the future
+        home: RecipeSteps(title: 'sous chef'),
+      );
 }
 
 class RecipeSteps extends StatefulWidget {
@@ -62,7 +62,7 @@ class RecipeSteps extends StatefulWidget {
   final String title;
 
   @override
-  _RecipeStepsState createState() => _RecipeStepsState(title);
+  _RecipeStepsState createState() => _RecipeStepsState();
 }
 
 Future<String> _showSelectionDialog(BuildContext context) async {
@@ -78,9 +78,8 @@ class _RecipeStepsState extends State<RecipeSteps> {
    * it is supposed to set the recipe member before it finishes. */
   Future<Recipe> setupFuture;
   Recipe recipe;
-  final String recipeName;
 
-  _RecipeStepsState(this.recipeName);
+  _RecipeStepsState();
 
   @override
   void initState() {
@@ -90,10 +89,10 @@ class _RecipeStepsState extends State<RecipeSteps> {
       if (recipes.length > 0 && recipes.last.finishedTime == null) {
         return Recipe.continueRecipe(recipes.last.startTime)
             .then((recipe) {
-          return recipe;
+          return recipe == null ? Recipe.emptyRecipe : recipe;
         });
       } else {
-        return Recipe.startRecipe(recipeName);
+        return Recipe.emptyRecipe;;
       }
     }));
     setupFuture = recipeFuture
@@ -110,7 +109,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
           ? IconButton(
           icon: Icon(Icons.play_arrow, size: 30.0),
           onPressed: () {
-            step.start();
+            recipe.startRecipe();
             setState(() {});
           })
           : Checkbox(
@@ -169,11 +168,11 @@ class _RecipeStepsState extends State<RecipeSteps> {
                   onPressed: () =>
                       _showSelectionDialog(context).then(
                               (recipeName) =>
-                              Recipe.startRecipe(recipeName).then((r) =>
-                                  setState(() {
-                                    this.recipe = r;
-                                    print("starting recipe $r");
-                                  }))),
+                                  Recipe.setupRecipe(recipeName).then((r) =>
+                                      setState(() {
+                                        this.recipe = r;
+                                        print("starting recipe $r");
+                                      }))),
                   child: Text("start new bake"));
             }
             return makeCard(

@@ -100,45 +100,47 @@ class Recipe {
   static Database db;
 
   static Future<void> loadDB() async => db = await openDatabase(
-    join((await getApplicationDocumentsDirectory()).path, 'history.db'),
-    onCreate: (db, version) => db.execute(
-      "CREATE TABLE "
+        join((await getApplicationDocumentsDirectory()).path, 'history.db'),
+        onCreate: (db, version) => db.execute(
+          "CREATE TABLE "
           "bakes(ts INTEGER PRIMARY KEY, start INTEGER, recipe TEXT, step INTEGER, state INTEGER)",
-    ),
-    version: 1,
-  );
+        ),
+        version: 1,
+      );
 
   static const int START_STATE = 0;
   static const int FINISH_STATE = 1;
+  static final emptyRecipe = Recipe._("");
 
   DateTime startTime;
   DateTime finishTime;
-  final String recipe;
-  String text; // this should be markdown
+  final String recipeName;
+  String text = "# start baking!"; // this should be markdown
 
   Future<void> logToDB(int step, int state) async {
     var now = DateTime.now();
     var entry = {
       'ts': now.millisecondsSinceEpoch,
       'start': startTime.millisecondsSinceEpoch,
-      'recipe': recipe,
+      'recipe': recipeName,
       'step': step,
       'state': state,
     };
+    print("logging ${entry}");
     await db.insert('bakes', entry);
     /* the timestamp needs to be unique, so wait a bit to ensure that happens */
     sleep(Duration(milliseconds: 2));
   }
 
-  Recipe._(this.recipe);
+  Recipe._(this.recipeName);
 
-  List<RecipeStep> steps;
+  List<RecipeStep> steps = [];
   int activeStepIndex = 0;
 
   void findActiveStep() {
     for (activeStepIndex = 0;
-    activeStepIndex < steps.length;
-    activeStepIndex++) {
+        activeStepIndex < steps.length;
+        activeStepIndex++) {
       if (activeStep.started != null && activeStep.finished == null) break;
     }
     if (activeStep == null) {
@@ -154,12 +156,18 @@ class Recipe {
           ? steps[activeStepIndex]
           : null;
 
-  static Future<Recipe> startRecipe(String recipeName) async {
+  static Future<Recipe> setupRecipe(String recipeName) async {
     print("starting $recipeName");
     Recipe recipe = await initRecipe(recipeName);
-    recipe.startTime = DateTime.now();
-    await recipe.logToDB(-1, START_STATE);
     return recipe;
+  }
+
+  void startRecipe() async {
+    startTime = DateTime.now();
+    await logToDB(-1, START_STATE);
+    if (steps[0].started == null) {
+      steps[0].start();
+    }
   }
 
   void finishRecipe() async {
@@ -170,6 +178,7 @@ class Recipe {
   static List<List<String>> recipeList = [];
 
   static Future<void> loadList() async {
+    print("loading list");
     String list = await rootBundle.loadString("assets/recipes/list");
     for (var line in list.split("\n")) {
       var fname = extractFirstWord(line);
@@ -181,11 +190,15 @@ class Recipe {
 
   static Future<Recipe> initRecipe(String recipeName) async {
     var recipeFileName = "assets/recipes/${recipeName}";
-    if (!recipeFileName.endsWith(".md")) recipeFileName += ".md";
-    String text = await rootBundle.loadString(recipeFileName);
+    String text;
+    try {
+      text = await rootBundle.loadString(recipeFileName);
+    } catch (e) {
+      return null;
+    }
     Recipe recipe = Recipe._(recipeName);
-    recipe.text = "";
     recipe.steps = List<RecipeStep>();
+    recipe.text = "";
     int index = 0;
     for (var line in text.split("\n")) {
       if (line.startsWith("=>")) {
@@ -218,6 +231,9 @@ class Recipe {
         whereArgs: [startTime.millisecondsSinceEpoch]);
     assert(results.length > 0);
     Recipe recipe = await initRecipe(results.first['recipe']);
+    if (recipe == null) {
+      return null;
+    }
     recipe.startTime = startTime;
     for (var entry in results) {
       if (entry['step'] != -1) {
