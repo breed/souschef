@@ -7,24 +7,27 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:souschef/main.dart';
+import 'package:souschef/recipe.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('startup smoke test', (WidgetTester tester) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await Recipe.loadList();
     // Build our app and trigger a frame.
-    await tester.pumpWidget(MyApp());
+    await tester.pumpWidget(SousChefApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await Future.delayed(Duration(seconds: 3));
+    expect(find.text('start baking!'), findsOneWidget);
+    expect(find.text('sour'), findsNothing);
 
     // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.byType(RaisedButton));
     await tester.pump();
 
     // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('select recipe'), findsOneWidget);
+    expect(find.text('sourdough bread hacked'), findsOneWidget);
+    expect(find.text('sourdough pizza'), findsOneWidget);
   });
 }
