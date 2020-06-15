@@ -12,7 +12,7 @@ this recipes was derived from a couple of cooks excellent recipe.
 => mix flour, water and milk
 => +60 let sit
 => add sourdough starter, salt
-=> +30 proof proof
+=> +30 proof
 => +30 fold dough, proof
 => +30 fold dough, proof
 => +45 fold dough, proof
