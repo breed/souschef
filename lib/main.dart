@@ -70,7 +70,7 @@ Future<String> _showSelectionDialog(BuildContext context) async {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext buildContext) => AlertDialog(
-          title: Text('select recipe'), content: RecipeListContainer()));
+          title: Text('select recipe'), content: makeRecipeListContainer()));
 }
 
 class _RecipeStepsState extends State<RecipeSteps> {
@@ -92,7 +92,7 @@ class _RecipeStepsState extends State<RecipeSteps> {
           return recipe == null ? Recipe.emptyRecipe : recipe;
         });
       } else {
-        return Recipe.emptyRecipe;;
+        return Recipe.emptyRecipe;
       }
     }));
     setupFuture = recipeFuture
