@@ -26,17 +26,19 @@ String formatDuration(Duration duration) => duration.inMinutes > 90
 String formatDateTime(DateTime dateTime) => dateTime.hour == 0
     ? "12:${dateTime.minute.toString().padLeft(2, '0')}a"
     : dateTime.hour > 12
-    ? "${dateTime.hour - 12}:${dateTime.minute.toString().padLeft(2, '0')}p"
-    : "${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}a";
+        ? "${dateTime.hour - 12}:${dateTime.minute.toString().padLeft(2, '0')}p"
+        : "${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}a";
 
 class RecipeStep {
-  RecipeStep(this.recipe, this.index, this.description, this.time, this.autoSetTimer);
+  RecipeStep(this.recipe, this.index, this.description, this.time,
+      this.autostartTimer, this.relativeTime);
 
   final Recipe recipe;
   final int index; // step number
   final String description; // from markdown
   final Duration time; // from markdown
-  final bool autoSetTimer; // from markdown
+  final bool autostartTimer; // from prefs
+  final bool relativeTime; // from prefs
   DateTime started; // from DB (null if not set)
   DateTime finished; // from DB (null if not set)
   bool timerSet = false; // transient (not from DB)
@@ -48,7 +50,7 @@ class RecipeStep {
   void start() {
     started = DateTime.now();
     recipe.logToDB(index, Recipe.START_STATE);
-    if (autoSetTimer) {
+    if (autostartTimer) {
       scheduleAlarm(time.inSeconds, description);
       timerSet = true;
     }
@@ -65,25 +67,29 @@ class RecipeStep {
     }
   }
 
-  DateTime get plannedFinish =>
-      prev == null ? willStart.add(time) : prev.plannedFinish.add(time);
+  DateTime get plannedStart =>
+      prev == null ? willStart : prev.plannedStart.add(prev.time);
 
-  DateTime get willFinish => finished != null
-      ? finished
-      : started != null
+  DateTime get willFinish =>
+      finished != null
+          ? finished
+          : started != null
           ? started.add(time)
           : prev == null ? DateTime.now().add(time) : prev.willFinish.add(time);
 
-  DateTime get willStart => started != null
-      ? started
-      : prev == null ? DateTime.now() : prev.willFinish;
+  DateTime get willStart =>
+      started != null
+          ? started
+          : prev == null ? DateTime.now() : prev.willFinish;
 
   String get durationString =>
       time.inSeconds > 0 ? "${formatDuration(time)}" : "";
 
-  String get runInterval => time.inSeconds > 0 || finished != null
-      ? "${formatDateTime(willStart)} to ${formatDateTime(willFinish)} planned ${formatDateTime(plannedFinish)}"
-      : "";
+  String get runInterval =>
+      time.inSeconds > 0 || finished != null
+          ? "${formatDateTime(willStart)} (was ${formatDateTime(
+          plannedStart)}) to ${formatDateTime(willFinish)}"
+          : "";
 }
 
 class PastRecipe {
@@ -156,9 +162,10 @@ class Recipe {
           ? steps[activeStepIndex]
           : null;
 
-  static Future<Recipe> setupRecipe(String recipeName) async {
+  static Future<Recipe> setupRecipe(String recipeName, bool autostartTimer,
+      bool relativeTime) async {
     print("starting $recipeName");
-    Recipe recipe = await initRecipe(recipeName);
+    Recipe recipe = await initRecipe(recipeName, autostartTimer, relativeTime);
     return recipe;
   }
 
@@ -188,7 +195,8 @@ class Recipe {
     }
   }
 
-  static Future<Recipe> initRecipe(String recipeName) async {
+  static Future<Recipe> initRecipe(String recipeName, bool autostartTimer,
+      bool relativeTime) async {
     var recipeFileName = "assets/recipes/${recipeName}";
     String text;
     try {
@@ -204,16 +212,17 @@ class Recipe {
       if (line.startsWith("=>")) {
         line = trimFirstWord(line);
         int mins = 0;
-        bool autoSetTimer = false;
         var firstChar = line.substring(0, 1);
         String desc = line;
+        bool stepAutostartTimer = autostartTimer;
         if (firstChar == "*" || firstChar == "+") {
           mins = int.parse(extractFirstWord(line.substring(1)));
           desc = trimFirstWord(line);
-          autoSetTimer = firstChar == "*";
+          stepAutostartTimer = stepAutostartTimer || firstChar == "*";
         }
         var step = RecipeStep(
-            recipe, index, desc.trim(), Duration(minutes: mins), autoSetTimer);
+            recipe, index, desc.trim(), Duration(minutes: mins),
+            stepAutostartTimer, relativeTime);
         recipe.steps.add(step);
         index++;
       } else {
@@ -223,14 +232,16 @@ class Recipe {
     return recipe;
   }
 
-  static Future<Recipe> continueRecipe(DateTime startTime) async {
+  static Future<Recipe> continueRecipe(DateTime startTime, bool autostartTimer,
+      bool relativeTime) async {
     print("continuing $startTime");
     List<Map> results = await db.query('bakes',
         columns: ['start', 'step', 'ts', 'state', 'recipe'],
         where: 'start = ?',
         whereArgs: [startTime.millisecondsSinceEpoch]);
     assert(results.length > 0);
-    Recipe recipe = await initRecipe(results.first['recipe']);
+    Recipe recipe = await initRecipe(
+        results.first['recipe'], autostartTimer, relativeTime);
     if (recipe == null) {
       return null;
     }

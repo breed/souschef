@@ -1,6 +1,7 @@
 # sourdough bread hacked
 
 this recipes was derived from a couple of cooks excellent recipe.
+there are great videos on how to do each step at https://www.acouplecooks.com/sourdough-bread-recipe-simplified-guide/ .
 
 ## ingredients
 * 400 grams all purpose or bread flour

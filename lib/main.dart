@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:souschef/recipe_list.dart';
 
 import 'recipe.dart';
@@ -37,9 +38,29 @@ import 'recipe.dart';
  * quick and dirty alarm scheduler. i'm not sure how to do this for iOS...
  */
 
+SharedPreferences prefs;
+/* keys for prefs */
+final AUTOSTART_TIMERS = "autostart_timers";
+final RELATIVE_TIME = "relative_time";
+
+bool get autostartTimers {
+  bool v = prefs.get(AUTOSTART_TIMERS);
+  return v == null ? false : v;
+}
+
+void setAutostartTimers(bool value) => prefs.setBool(AUTOSTART_TIMERS, value);
+
+bool get relativeTime {
+  bool v = prefs.get(RELATIVE_TIME);
+  return v == null ? false : v;
+}
+
+void setRelativeTime(bool value) => prefs.setBool(RELATIVE_TIME, value);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Recipe.loadList();
+  prefs = await SharedPreferences.getInstance();
   runApp(SousChefApp());
 }
 
@@ -69,8 +90,37 @@ Future<String> _showSelectionDialog(BuildContext context) async {
   return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext buildContext) => AlertDialog(
-          title: Text('select recipe'), content: makeRecipeListContainer()));
+      builder: (BuildContext buildContext) =>
+          AlertDialog(
+              title: Text('select recipe'),
+              content: makeRecipeListContainer()));
+}
+
+Future<void> _showSettingsDialog(BuildContext context) async {
+  return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext buildContext) =>
+          AlertDialog(
+            title: Text('settings'),
+            content: ListView(children: <Widget>[
+              CheckboxListTile(
+                title: Text("autostart timers"),
+                subtitle: Text(
+                    "auto start the timer for a step when the previous step is checked complete."),
+                value: autostartTimers,
+                onChanged: (value) => setAutostartTimers(value),
+              ),
+              CheckboxListTile(
+                title: Text("relative times"),
+                subtitle:
+                Text("each step starts when previous step actually ends."),
+                value: relativeTime,
+                onChanged: (value) => setRelativeTime(value),
+              ),
+              Text("Version 1.0"),
+            ]),
+          ));
 }
 
 class _RecipeStepsState extends State<RecipeSteps> {
@@ -85,16 +135,18 @@ class _RecipeStepsState extends State<RecipeSteps> {
   void initState() {
     super.initState();
     Future<Recipe> recipeFuture =
-    Recipe.loadDB().then((value) => Recipe.pastRecipes().then((recipes) {
-      if (recipes.length > 0 && recipes.last.finishedTime == null) {
-        return Recipe.continueRecipe(recipes.last.startTime)
-            .then((recipe) {
-          return recipe == null ? Recipe.emptyRecipe : recipe;
-        });
-      } else {
-        return Recipe.emptyRecipe;
-      }
-    }));
+    Recipe.loadDB().then((value) =>
+        Recipe.pastRecipes().then((recipes) {
+          if (recipes.length > 0 && recipes.last.finishedTime == null) {
+            return Recipe.continueRecipe(
+                recipes.last.startTime, autostartTimers, relativeTime)
+                .then((recipe) {
+              return recipe == null ? Recipe.emptyRecipe : recipe;
+            });
+          } else {
+            return Recipe.emptyRecipe;
+          }
+        }));
     setupFuture = recipeFuture
         .then((Recipe recipe) => this.recipe = recipe)
         .then((recipe) => this.recipe = recipe);
@@ -114,31 +166,31 @@ class _RecipeStepsState extends State<RecipeSteps> {
           })
           : Checkbox(
         value: step.finished != null,
-                  onChanged: (value) {
-                    if (value &&
-                        (step.prev == null || step.prev.finished != null)) {
-                      step.finish();
-                      setState(() {});
-                    }
-                  },
-                ),
-          title: Text("${step.description} ${step.durationString}"),
-          subtitle: Text("${step.runInterval}"),
+        onChanged: (value) {
+          if (value &&
+              (step.prev == null || step.prev.finished != null)) {
+            step.finish();
+            setState(() {});
+          }
+        },
+      ),
+      title: Text("${step.description} ${step.durationString}"),
+      subtitle: Text("${step.runInterval}"),
           trailing: step.time.inSeconds > 0 &&
                   step.finished == null &&
                   (step.index == 0 ||
                       recipe.steps[step.index - 1].finished != null)
               ? (step.timerSet
-                  ? Icon(Icons.hourglass_full)
-                  : IconButton(
-                      icon: Icon(Icons.alarm_add, size: 30.0),
-                      onPressed: () {
-                        scheduleAlarm(
-                            step.time.inSeconds, "${step.description}");
-                        step.timerSet = true;
-                        setState(() {});
-          }))
-          : null,
+              ? Icon(Icons.hourglass_full)
+              : IconButton(
+              icon: Icon(Icons.alarm_add, size: 30.0),
+              onPressed: () {
+                scheduleAlarm(
+                    step.time.inSeconds, "${step.description}");
+                step.timerSet = true;
+                setState(() {});
+              }))
+              : null,
     );
     Card makeCard(RecipeStep step, bool active) => Card(
         elevation: 8.0,
@@ -168,11 +220,13 @@ class _RecipeStepsState extends State<RecipeSteps> {
                   onPressed: () =>
                       _showSelectionDialog(context).then(
                               (recipeName) =>
-                                  Recipe.setupRecipe(recipeName).then((r) =>
-                                      setState(() {
-                                        this.recipe = r;
-                                        print("starting recipe $r");
-                                      }))),
+                              Recipe.setupRecipe(
+                                  recipeName, autostartTimers, relativeTime)
+                                  .then((r) =>
+                                  setState(() {
+                                    this.recipe = r;
+                                    print("starting recipe $r");
+                                  }))),
                   child: Text("start new bake"));
             }
             return makeCard(
@@ -185,6 +239,13 @@ class _RecipeStepsState extends State<RecipeSteps> {
 
   @override
   Widget build(BuildContext buildContext) => Scaffold(
+      appBar: AppBar(
+        title: Text("sous chef"),
+        leading: FlatButton(
+          child: Icon(Icons.settings),
+          onPressed: () => _showSettingsDialog(buildContext),
+        ),
+      ),
       body: FutureBuilder(
           future: setupFuture,
           builder: (BuildContext buildContext, AsyncSnapshot<void> snapshot) {
