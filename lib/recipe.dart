@@ -1,10 +1,7 @@
-import 'dart:io';
-
 import 'package:android_intent/android_intent.dart';
 import 'package:flutter/services.dart';
-import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
+
+import 'storage.dart';
 
 void scheduleAlarm(int seconds, String message) async =>
     await AndroidIntent(action: "android.intent.action.SET_TIMER", arguments: {
@@ -49,7 +46,7 @@ class RecipeStep {
 
   void start() {
     started = DateTime.now();
-    recipe.logToDB(index, Recipe.START_STATE);
+    storeCurrentRecipe(recipe);
     if (autostartTimer) {
       scheduleAlarm(time.inSeconds, description);
       timerSet = true;
@@ -58,38 +55,27 @@ class RecipeStep {
 
   void finish() {
     finished = DateTime.now();
-    recipe.logToDB(index, Recipe.FINISH_STATE);
     if (next != null) {
       if (next.started == null) next.start();
       recipe.advanceStep();
     } else {
       recipe.finishRecipe();
     }
+    storeCurrentRecipe(recipe);
   }
 
-  DateTime get plannedStart =>
-      prev == null ? willStart : prev.plannedStart.add(prev.time);
-
-  DateTime get willFinish =>
-      finished != null
-          ? finished
-          : started != null
-          ? started.add(time)
-          : prev == null ? DateTime.now().add(time) : prev.willFinish.add(time);
-
-  DateTime get willStart =>
-      started != null
-          ? started
-          : prev == null ? DateTime.now() : prev.willFinish;
+  DateTime get plannedStart => prev == null
+      ? started == null ? DateTime.now() : started
+      : prev.plannedStart.add(prev.time);
 
   String get durationString =>
       time.inSeconds > 0 ? "${formatDuration(time)}" : "";
 
   String get runInterval =>
-      time.inSeconds > 0 || finished != null
-          ? "${formatDateTime(willStart)} (was ${formatDateTime(
-          plannedStart)}) to ${formatDateTime(willFinish)}"
-          : "";
+      "planned start ${formatDateTime(plannedStart)} " +
+          (finished != null
+              ? " finished ${formatDateTime(finished)}"
+              : "");
 }
 
 class PastRecipe {
@@ -103,17 +89,6 @@ class PastRecipe {
 }
 
 class Recipe {
-  static Database db;
-
-  static Future<void> loadDB() async => db = await openDatabase(
-        join((await getApplicationDocumentsDirectory()).path, 'history.db'),
-        onCreate: (db, version) => db.execute(
-          "CREATE TABLE "
-          "bakes(ts INTEGER PRIMARY KEY, start INTEGER, recipe TEXT, step INTEGER, state INTEGER)",
-        ),
-        version: 1,
-      );
-
   static const int START_STATE = 0;
   static const int FINISH_STATE = 1;
   static final emptyRecipe = Recipe._("");
@@ -122,21 +97,6 @@ class Recipe {
   DateTime finishTime;
   final String recipeName;
   String text = "# start baking!"; // this should be markdown
-
-  Future<void> logToDB(int step, int state) async {
-    var now = DateTime.now();
-    var entry = {
-      'ts': now.millisecondsSinceEpoch,
-      'start': startTime.millisecondsSinceEpoch,
-      'recipe': recipeName,
-      'step': step,
-      'state': state,
-    };
-    print("logging ${entry}");
-    await db.insert('bakes', entry);
-    /* the timestamp needs to be unique, so wait a bit to ensure that happens */
-    sleep(Duration(milliseconds: 2));
-  }
 
   Recipe._(this.recipeName);
 
@@ -171,7 +131,6 @@ class Recipe {
 
   void startRecipe() async {
     startTime = DateTime.now();
-    await logToDB(-1, START_STATE);
     if (steps[0].started == null) {
       steps[0].start();
     }
@@ -179,7 +138,6 @@ class Recipe {
 
   void finishRecipe() async {
     finishTime = DateTime.now();
-    await logToDB(-1, FINISH_STATE);
   }
 
   static List<List<String>> recipeList = [];
@@ -230,69 +188,5 @@ class Recipe {
       }
     }
     return recipe;
-  }
-
-  static Future<Recipe> continueRecipe(DateTime startTime, bool autostartTimer,
-      bool relativeTime) async {
-    print("continuing $startTime");
-    List<Map> results = await db.query('bakes',
-        columns: ['start', 'step', 'ts', 'state', 'recipe'],
-        where: 'start = ?',
-        whereArgs: [startTime.millisecondsSinceEpoch]);
-    assert(results.length > 0);
-    Recipe recipe = await initRecipe(
-        results.first['recipe'], autostartTimer, relativeTime);
-    if (recipe == null) {
-      return null;
-    }
-    recipe.startTime = startTime;
-    for (var entry in results) {
-      if (entry['step'] != -1) {
-        DateTime dt = DateTime.fromMillisecondsSinceEpoch(entry['ts']);
-        switch (entry['state']) {
-          case START_STATE:
-            recipe.steps[entry['step']].started = dt;
-            break;
-          case FINISH_STATE:
-            recipe.steps[entry['step']].finished = dt;
-            break;
-        }
-      } else {
-        if (entry['state'] == FINISH_STATE) {
-          recipe.finishTime = DateTime.fromMillisecondsSinceEpoch(entry['ts']);
-        }
-      }
-    }
-    return recipe;
-  }
-
-  static Future<List<PastRecipe>> pastRecipes() async {
-    List<Map> results = await db.query(
-      'bakes',
-      columns: ['start', 'recipe', 'ts', 'state', 'step'],
-      orderBy: 'start',
-      where: 'step == -1',
-    );
-    Map<int, PastRecipe> map = Map<int, PastRecipe>();
-    for (var entry in results) {
-      int start = entry['start'];
-      int ts = entry['ts'];
-      String recipeName = entry['recipe'];
-      PastRecipe pastRecipe = map[start];
-      if (pastRecipe == null) {
-        pastRecipe =
-            PastRecipe(DateTime.fromMillisecondsSinceEpoch(start), recipeName);
-        map[start] = pastRecipe;
-      }
-      if (entry['state'] == FINISH_STATE) {
-        pastRecipe.finishedTime = DateTime.fromMillisecondsSinceEpoch(ts);
-      }
-    }
-
-    var keys = map.keys.toList(growable: false);
-    keys.sort((a, b) => a - b);
-    List<PastRecipe> past = List<PastRecipe>();
-    for (var key in keys) past.add(map[key]);
-    return past;
   }
 }

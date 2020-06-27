@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:souschef/recipe_list.dart';
 
 import 'recipe.dart';
+import 'storage.dart';
 
 /**
  * a simple app to help with managing the steps of a recipe. it is
@@ -38,29 +38,10 @@ import 'recipe.dart';
  * quick and dirty alarm scheduler. i'm not sure how to do this for iOS...
  */
 
-SharedPreferences prefs;
-/* keys for prefs */
-final AUTOSTART_TIMERS = "autostart_timers";
-final RELATIVE_TIME = "relative_time";
-
-bool get autostartTimers {
-  bool v = prefs.get(AUTOSTART_TIMERS);
-  return v == null ? false : v;
-}
-
-void setAutostartTimers(bool value) => prefs.setBool(AUTOSTART_TIMERS, value);
-
-bool get relativeTime {
-  bool v = prefs.get(RELATIVE_TIME);
-  return v == null ? false : v;
-}
-
-void setRelativeTime(bool value) => prefs.setBool(RELATIVE_TIME, value);
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await setupStorage();
   await Recipe.loadList();
-  prefs = await SharedPreferences.getInstance();
   runApp(SousChefApp());
 }
 
@@ -135,18 +116,8 @@ class _RecipeStepsState extends State<RecipeSteps> {
   void initState() {
     super.initState();
     Future<Recipe> recipeFuture =
-    Recipe.loadDB().then((value) =>
-        Recipe.pastRecipes().then((recipes) {
-          if (recipes.length > 0 && recipes.last.finishedTime == null) {
-            return Recipe.continueRecipe(
-                recipes.last.startTime, autostartTimers, relativeTime)
-                .then((recipe) {
-              return recipe == null ? Recipe.emptyRecipe : recipe;
-            });
-          } else {
-            return Recipe.emptyRecipe;
-          }
-        }));
+    getCurrentRecipe(autostartTimers, relativeTime)
+        .then((value) => value == null ? Recipe.emptyRecipe : value);
     setupFuture = recipeFuture
         .then((Recipe recipe) => this.recipe = recipe)
         .then((recipe) => this.recipe = recipe);
@@ -176,21 +147,21 @@ class _RecipeStepsState extends State<RecipeSteps> {
       ),
       title: Text("${step.description} ${step.durationString}"),
       subtitle: Text("${step.runInterval}"),
-          trailing: step.time.inSeconds > 0 &&
-                  step.finished == null &&
-                  (step.index == 0 ||
-                      recipe.steps[step.index - 1].finished != null)
-              ? (step.timerSet
-              ? Icon(Icons.hourglass_full)
-              : IconButton(
-              icon: Icon(Icons.alarm_add, size: 30.0),
-              onPressed: () {
-                scheduleAlarm(
-                    step.time.inSeconds, "${step.description}");
-                step.timerSet = true;
-                setState(() {});
-              }))
-              : null,
+      trailing: step.time.inSeconds > 0 &&
+          step.finished == null &&
+          (step.index == 0 ||
+              recipe.steps[step.index - 1].finished != null)
+          ? (step.timerSet
+          ? Icon(Icons.hourglass_full)
+          : IconButton(
+          icon: Icon(Icons.alarm_add, size: 30.0),
+          onPressed: () {
+            scheduleAlarm(
+                step.time.inSeconds, "${step.description}");
+            step.timerSet = true;
+            setState(() {});
+          }))
+          : null,
     );
     Card makeCard(RecipeStep step, bool active) => Card(
         elevation: 8.0,
