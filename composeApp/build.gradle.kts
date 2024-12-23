@@ -54,6 +54,7 @@ kotlin {
                 implementation(libs.androidx.lifecycle.viewmodel)
                 implementation(libs.androidx.lifecycle.runtime.compose)
                 implementation(libs.kotlinx.datetime)
+                implementation("com.squareup.okio:okio-multiplatform:3.0.0-alpha.9")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.6.1")
             }
         }

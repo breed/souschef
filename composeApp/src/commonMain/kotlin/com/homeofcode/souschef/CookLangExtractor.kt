@@ -57,7 +57,7 @@ class CookLangExtractor(var markDown: String) {
     // "@(?<item>[\\w\\s}]+)\\{(?<quantity>\\d+([.]\\d+)?)%(?<unit>[\\w\\s]+)\\}"
 
     private fun extractIngredients(text: String): String {
-        return Regex("@(?<item>[^\\{]+)\\{(?<quantity>\\d+([.]\\d+)?)%(?<unit>[\\w\\s]+)}").replace(text, transform = {
+        return Regex("@(?<item>[^{]+)\\{(?<quantity>\\d+([.]\\d+)?)%(?<unit>[\\w\\s]+)\\}").replace(text, transform = {
             val item = it.groups["item"]?.value ?: ""
             val quantity = it.groups["quantity"]?.value?.toFloat() ?: 0f
             val unit = it.groups["unit"]?.value ?: ""
@@ -84,7 +84,7 @@ class CookLangExtractor(var markDown: String) {
      */
     private fun extractDurationAndGenerateStep(processedText: String): CookLangStep {
         var duration: Duration? = null
-        val finalText = Regex("~\\{(?<amount>\\d+)%(?<unit>\\w+)}").replace(processedText, transform = {
+        val finalText = Regex("~\\{(?<amount>\\d+)%(?<unit>\\w+)\\}").replace(processedText, transform = {
             val num = it.groups["amount"]?.value?.toInt() ?: 0
             val timeUnit = it.groups["unit"]?.value ?: ""
             val durationUnit = when (timeUnit.substring(0, 1).uppercase()) {

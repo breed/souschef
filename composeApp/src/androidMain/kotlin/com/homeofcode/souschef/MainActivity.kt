@@ -1,48 +1,41 @@
 package com.homeofcode.souschef
 
-import android.content.IntentFilter
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.tooling.preview.Preview
-import kotlinx.datetime.Instant
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import com.homeofcode.souschef.com.homeofcode.souschef.model.BakeModel
+
+const val TIMER_ACTION_INTENT: String = "com.homeofcode.souschef.ACTION_TRIGGER_ALARM"
 
 class MainActivity : ComponentActivity() {
-    private var alarmTriggered: Instant? by mutableStateOf(Instant.DISTANT_PAST)
-
+    companion object {
+        var platform: AndroidPlatform? = null
+    }
+    var bake: BakeModel? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val intentFilter = IntentFilter("com.homeofcode.souschef.ALARM")
-        registerReceiver(AlarmReceiver, intentFilter);
+        platform = AndroidPlatform(this)
         setContent {
-            App(alarmTriggered)
+            if (bake == null) bake = BakeModel()
+            if (intent.action.equals(TIMER_ACTION_INTENT)) {
+                if (bake?.alarmEnabled?.value ?: false) {
+                    val nextAlarm = bake?.calculateNextAlarm(now())
+                    if (nextAlarm != null) {
+                        setAlarm(nextAlarm)
+                    }
+                }
+                println("got timer!")
+            }
+            App(bake!!)
         }
-
-    }
-
-    override fun onPause() {
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        unregisterReceiver(AlarmReceiver)
-        super.onDestroy()
-    }
-
-    fun alarmTriggered() {
-        alarmTriggered = now()
     }
 }
 
 @Preview
 @Composable
 fun AppAndroidPreview() {
-    var alarmTriggered: Instant? by mutableStateOf(Instant.DISTANT_PAST)
-
-    App(alarmTriggered)
+    val bake = BakeModel()
+    App(bake)
 }

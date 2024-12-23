@@ -1,57 +1,119 @@
 package com.homeofcode.souschef
 
+import android.annotation.SuppressLint
 import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.RingtoneManager
 import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toJavaLocalDateTime
+import kotlinx.datetime.toLocalDateTime
+import java.io.InputStream
+import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Calendar
 
-object AlarmReceiver : BroadcastReceiver() {
+class AlarmReceiver : BroadcastReceiver() {
+    @SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent) {
-        val activity = context as MainActivity
-        activity.alarmTriggered()
+        val channelId = "alarm_channel"
+        val channelName = "Alarm Notifications"
+
+        val importance = NotificationManager.IMPORTANCE_HIGH
+        val channel = NotificationChannel(channelId, channelName, importance).apply {
+            description = "Channel for alarm notifications"
+        }
+        val notificationManager: NotificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+
+        // Create an intent to open MainActivity when the notification is clicked
+        val mainIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            setAction(TIMER_ACTION_INTENT)
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            mainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Build the notification
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.mipmap.sous_icon)
+            .setContentTitle("Sous Chef Step Finished")
+            .setContentText("Ready for the next step!")
+            .setPriority(NotificationCompat.PRIORITY_HIGH).setContentIntent(pendingIntent)
+            .setAutoCancel(true).setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+            .build()
+
+        // Show the notification
+        with(NotificationManagerCompat.from(context)) {
+            notify(1, notification)
+        }
     }
 }
 
-class AndroidPlatform(private val context: Context) : Platform {
+class AndroidPlatform(private val mainActivity: MainActivity) : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
-    override fun setAlarm(time: Instant?, action: () -> Unit): Boolean {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    override fun setAlarm(time: Instant?): Boolean {
+        if (mainActivity.checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+            mainActivity.requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 666)
+        }
+
+        val alarmManager = mainActivity.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         if (!alarmManager.canScheduleExactAlarms()) {
             return false
         }
-        val intent = Intent("com.homeofcode.souschef.ALARM")
+        val intent = Intent(mainActivity, AlarmReceiver::class.java).apply {
+            setAction(TIMER_ACTION_INTENT)
+        }
         val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            1,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            mainActivity, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         if (time == null) {
             alarmManager.cancel(pendingIntent)
             return true
         }
-        toast("Alarm set for ${time.toEpochMilliseconds() - System.currentTimeMillis()}")
+        val localTime = time.toLocalDateTime(TimeZone.currentSystemDefault()).toJavaLocalDateTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+
+        toast("Alarm set for $localTime")
         val triggerAtMillis = time.toEpochMilliseconds()
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAtMillis,
-            pendingIntent
+        alarmManager.setExact(
+            AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
         )
         return true
     }
 
+    override fun readState(): InputStream {
+        return Files.newInputStream(mainActivity.dataDir.toPath().resolve("state.txt"))
+    }
+
+    override fun writeState(): OutputStream {
+        return Files.newOutputStream(
+            mainActivity.dataDir.toPath().resolve("state.txt"),
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING
+        )
+    }
+
     override fun toast(message: String) {
-        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(mainActivity, message, android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
-@Composable
-actual fun getPlatform(): Platform = AndroidPlatform(LocalContext.current)
+actual fun getPlatform(): Platform = MainActivity.platform!!
