@@ -1,24 +1,38 @@
 package com.homeofcode.souschef
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import com.homeofcode.souschef.com.homeofcode.souschef.model.BakeModel
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -42,18 +56,17 @@ fun timeToUTC(time: Instant): Instant {
     return time.toLocalDateTime(TimeZone.UTC).toInstant(TimeZone.currentSystemDefault())
 }
 
-sealed class Screen {
-    data object RecipeList : Screen()
-    data class RecipeDetail(val recipeId: String) : Screen()
-    data object AddRecipe : Screen()
-    data class EditRecipe(val recipe: RecipeInfo) : Screen()
+sealed class EditorScreen {
+    data object None : EditorScreen()
+    data object AddRecipe : EditorScreen()
+    data class EditRecipe(val recipe: RecipeInfo) : EditorScreen()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 @Preview
 fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.RecipeList) }
+    var editorScreen by remember { mutableStateOf<EditorScreen>(EditorScreen.None) }
 
     // Load any persisted active bakes and user recipes on first composition
     LaunchedEffect(Unit) {
@@ -62,60 +75,34 @@ fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
     }
 
     MaterialTheme {
-        when (val screen = currentScreen) {
-            is Screen.RecipeList -> {
-                RecipeSelector(
-                    onRecipeSelected = { recipe ->
-                        val bake = ActiveBakesManager.getOrCreateBake(recipe)
-                        onBakeCreated?.invoke(bake)
-                        currentScreen = Screen.RecipeDetail(recipe.id)
-                    },
-                    onAddRecipe = {
-                        currentScreen = Screen.AddRecipe
-                    },
-                    onEditRecipe = { recipe ->
-                        currentScreen = Screen.EditRecipe(recipe)
-                    },
-                    onDeleteRecipe = { recipe ->
-                        RecipeRegistry.deleteUserRecipe(recipe.id)
-                        ActiveBakesManager.removeBake(recipe.id)
-                    },
-                    onDuplicateRecipe = { recipe ->
-                        val duplicated = RecipeRegistry.duplicateRecipe(recipe)
-                        if (duplicated != null) {
-                            // Open the duplicated recipe for editing
-                            currentScreen = Screen.EditRecipe(duplicated)
-                        }
-                    }
+        when (val editor = editorScreen) {
+            is EditorScreen.None -> {
+                MainPager(
+                    onBakeCreated = onBakeCreated,
+                    onAddRecipe = { editorScreen = EditorScreen.AddRecipe },
+                    onEditRecipe = { recipe -> editorScreen = EditorScreen.EditRecipe(recipe) }
                 )
             }
-            is Screen.RecipeDetail -> {
-                ActiveRecipePager(
-                    initialRecipeId = screen.recipeId,
-                    onBackToList = { currentScreen = Screen.RecipeList },
-                    onBakeCreated = onBakeCreated
-                )
-            }
-            is Screen.AddRecipe -> {
+            is EditorScreen.AddRecipe -> {
                 RecipeEditor(
                     onSave = { savedRecipe ->
-                        currentScreen = Screen.RecipeList
+                        editorScreen = EditorScreen.None
                     },
                     onCancel = {
-                        currentScreen = Screen.RecipeList
+                        editorScreen = EditorScreen.None
                     }
                 )
             }
-            is Screen.EditRecipe -> {
+            is EditorScreen.EditRecipe -> {
                 RecipeEditor(
-                    existingRecipe = screen.recipe,
+                    existingRecipe = editor.recipe,
                     onSave = { savedRecipe ->
                         // Remove old bake if it exists (recipe content may have changed)
-                        ActiveBakesManager.removeBake(screen.recipe.id)
-                        currentScreen = Screen.RecipeList
+                        ActiveBakesManager.removeBake(editor.recipe.id)
+                        editorScreen = EditorScreen.None
                     },
                     onCancel = {
-                        currentScreen = Screen.RecipeList
+                        editorScreen = EditorScreen.None
                     }
                 )
             }
@@ -125,35 +112,29 @@ fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ActiveRecipePager(
-    initialRecipeId: String,
-    onBackToList: () -> Unit,
-    onBakeCreated: ((BakeModel) -> Unit)? = null
+fun MainPager(
+    onBakeCreated: ((BakeModel) -> Unit)? = null,
+    onAddRecipe: () -> Unit,
+    onEditRecipe: (RecipeInfo) -> Unit
 ) {
     val activeBakes = ActiveBakesManager.activeBakes
-    var currentRecipeId by remember { mutableStateOf(initialRecipeId) }
+    val coroutineScope = rememberCoroutineScope()
 
-    // Find the initial page index
-    val initialPage = remember(initialRecipeId) {
-        activeBakes.indexOfFirst { it.recipeInfo.id == initialRecipeId }.coerceAtLeast(0)
-    }
-
-    if (activeBakes.isEmpty()) {
-        onBackToList()
-        return
-    }
+    // Page 0 = Recipe list, Pages 1+ = Active recipes
+    // Use derivedStateOf to ensure pageCount updates reactively
+    val pageCount by remember { derivedStateOf { 1 + activeBakes.size } }
 
     val pagerState = rememberPagerState(
-        initialPage = initialPage,
-        pageCount = { activeBakes.size }
+        initialPage = 0,
+        pageCount = { 1 + ActiveBakesManager.activeBakes.size }
     )
 
-    // Track page changes to update current recipe
+    // Track page changes to update current bake for alarms
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
-            if (page in activeBakes.indices) {
-                currentRecipeId = activeBakes[page].recipeInfo.id
-                onBakeCreated?.invoke(activeBakes[page].bakeModel)
+            val currentActiveBakes = ActiveBakesManager.activeBakes
+            if (page > 0 && page - 1 in currentActiveBakes.indices) {
+                onBakeCreated?.invoke(currentActiveBakes[page - 1].bakeModel)
             }
         }
     }
@@ -163,16 +144,87 @@ fun ActiveRecipePager(
             state = pagerState,
             modifier = Modifier.fillMaxSize()
         ) { page ->
-            if (page in activeBakes.indices) {
-                val activeBake = activeBakes[page]
-                RecipeCard(
-                    bake = activeBake.bakeModel,
-                    onBackToList = onBackToList,
-                    showPageIndicator = activeBakes.size > 1,
-                    currentPage = pagerState.currentPage,
-                    totalPages = activeBakes.size
+            val currentActiveBakes = ActiveBakesManager.activeBakes
+            if (page == 0) {
+                // Recipe list page
+                RecipeSelector(
+                    onRecipeSelected = { recipe ->
+                        val bake = ActiveBakesManager.getOrCreateBake(recipe)
+                        onBakeCreated?.invoke(bake)
+                        // Find the page index for this recipe and navigate to it
+                        val recipeIndex = ActiveBakesManager.activeBakes.indexOfFirst {
+                            it.recipeInfo.id == recipe.id
+                        }
+                        if (recipeIndex >= 0) {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(recipeIndex + 1)
+                            }
+                        }
+                    },
+                    onAddRecipe = onAddRecipe,
+                    onEditRecipe = onEditRecipe,
+                    onDeleteRecipe = { recipe ->
+                        RecipeRegistry.deleteUserRecipe(recipe.id)
+                        ActiveBakesManager.removeBake(recipe.id)
+                    },
+                    onDuplicateRecipe = { recipe ->
+                        val duplicated = RecipeRegistry.duplicateRecipe(recipe)
+                        if (duplicated != null) {
+                            onEditRecipe(duplicated)
+                        }
+                    }
                 )
+            } else {
+                // Active recipe pages
+                val recipeIndex = page - 1
+                if (recipeIndex in currentActiveBakes.indices) {
+                    val activeBake = currentActiveBakes[recipeIndex]
+                    RecipeCard(
+                        bake = activeBake.bakeModel
+                    )
+                }
             }
+        }
+
+        // Page indicator dots at the bottom
+        if (pageCount > 1) {
+            PageIndicator(
+                pagerState = pagerState,
+                pageCount = pageCount,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun PageIndicator(
+    pagerState: PagerState,
+    pageCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(pageCount) { index ->
+            val isSelected = pagerState.currentPage == index
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .size(if (isSelected) 10.dp else 8.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isSelected) MaterialTheme.colors.primary
+                        else Color.LightGray
+                    )
+            )
         }
     }
 }
