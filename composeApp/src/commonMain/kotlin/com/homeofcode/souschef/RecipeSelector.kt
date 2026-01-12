@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,7 +29,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+
+// Simple copy icon using path data
+@Composable
+private fun CopyIcon(tint: Color) {
+    Icon(
+        Icons.Default.Add, // Placeholder, we'll use text instead
+        contentDescription = "Duplicate",
+        tint = tint,
+        modifier = Modifier.size(24.dp)
+    )
+}
 
 @Composable
 fun RecipeSelector(
@@ -36,6 +50,7 @@ fun RecipeSelector(
     onAddRecipe: () -> Unit = {},
     onEditRecipe: (RecipeInfo) -> Unit = {},
     onDeleteRecipe: (RecipeInfo) -> Unit = {},
+    onDuplicateRecipe: (RecipeInfo) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var recipeToDelete by remember { mutableStateOf<RecipeInfo?>(null) }
@@ -76,7 +91,8 @@ fun RecipeSelector(
                     onClick = { onRecipeSelected(recipe) },
                     onEdit = { onEditRecipe(recipe) },
                     onDelete = { recipeToDelete = recipe },
-                    showActions = true
+                    onDuplicate = { onDuplicateRecipe(recipe) },
+                    isUserRecipe = true
                 )
             }
         }
@@ -93,7 +109,8 @@ fun RecipeSelector(
                 RecipeListItem(
                     recipe = recipe,
                     onClick = { onRecipeSelected(recipe) },
-                    showActions = false
+                    onDuplicate = { onDuplicateRecipe(recipe) },
+                    isUserRecipe = false
                 )
             }
         }
@@ -130,7 +147,8 @@ private fun RecipeListItem(
     onClick: () -> Unit,
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
-    showActions: Boolean = false,
+    onDuplicate: () -> Unit = {},
+    isUserRecipe: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -160,7 +178,17 @@ private fun RecipeListItem(
                     )
                 }
             }
-            if (showActions) {
+
+            // Duplicate button (shown for all recipes)
+            IconButton(onClick = onDuplicate) {
+                Text(
+                    text = "copy",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.secondary
+                )
+            }
+
+            if (isUserRecipe) {
                 IconButton(onClick = onEdit) {
                     Icon(
                         Icons.Default.Edit,

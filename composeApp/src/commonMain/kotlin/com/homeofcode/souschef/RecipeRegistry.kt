@@ -1,6 +1,9 @@
 package com.homeofcode.souschef
 
 import androidx.compose.runtime.mutableStateListOf
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import souschef.composeapp.generated.resources.Res
 
 data class RecipeInfo(
     val id: String,
@@ -114,13 +117,44 @@ object RecipeRegistry {
         return deleted
     }
 
+    @OptIn(ExperimentalResourceApi::class)
     fun getRecipeContent(recipe: RecipeInfo): String? {
         return if (recipe.isBuiltIn) {
-            null // Built-in recipes are loaded via Res.readBytes
+            // Read built-in recipe from resources
+            runBlocking {
+                try {
+                    String(Res.readBytes(recipe.filePath))
+                } catch (e: Exception) {
+                    null
+                }
+            }
         } else {
             val filename = recipe.filePath.removePrefix("user:")
             getPlatform().readUserRecipe(filename)
         }
+    }
+
+    fun duplicateRecipe(recipe: RecipeInfo): RecipeInfo? {
+        val content = getRecipeContent(recipe) ?: return null
+
+        // Parse the content to modify the title
+        val extractor = CookLangExtractor(content)
+        val originalTitle = extractor.meta["title"] as? String ?: recipe.name
+        val newTitle = "$originalTitle (Copy)"
+
+        // Replace the title in the content
+        val newContent = if (content.contains("title:")) {
+            content.replace(
+                Regex("title:\\s*.*"),
+                "title: $newTitle"
+            )
+        } else {
+            // Add title if it doesn't exist
+            "---\ntitle: $newTitle\n---\n\n$content"
+        }
+
+        val filename = generateUniqueFilename(newTitle)
+        return addUserRecipe(filename, newContent)
     }
 
     fun generateUniqueFilename(baseName: String): String {

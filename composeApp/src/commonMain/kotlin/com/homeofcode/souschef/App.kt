@@ -79,6 +79,13 @@ fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
                     onDeleteRecipe = { recipe ->
                         RecipeRegistry.deleteUserRecipe(recipe.id)
                         ActiveBakesManager.removeBake(recipe.id)
+                    },
+                    onDuplicateRecipe = { recipe ->
+                        val duplicated = RecipeRegistry.duplicateRecipe(recipe)
+                        if (duplicated != null) {
+                            // Open the duplicated recipe for editing
+                            currentScreen = Screen.EditRecipe(duplicated)
+                        }
                     }
                 )
             }
