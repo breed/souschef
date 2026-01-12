@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,12 @@ fun RecipeSelector(
                     onEdit = { onEditRecipe(recipe) },
                     onDelete = { recipeToDelete = recipe },
                     onDuplicate = { onDuplicateRecipe(recipe) },
+                    onShare = {
+                        val content = RecipeRegistry.getRecipeContent(recipe)
+                        if (content != null) {
+                            getPlatform().shareRecipe(recipe.name, content)
+                        }
+                    },
                     isUserRecipe = true
                 )
             }
@@ -110,6 +117,12 @@ fun RecipeSelector(
                     recipe = recipe,
                     onClick = { onRecipeSelected(recipe) },
                     onDuplicate = { onDuplicateRecipe(recipe) },
+                    onShare = {
+                        val content = RecipeRegistry.getRecipeContent(recipe)
+                        if (content != null) {
+                            getPlatform().shareRecipe(recipe.name, content)
+                        }
+                    },
                     isUserRecipe = false
                 )
             }
@@ -148,6 +161,7 @@ private fun RecipeListItem(
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
     onDuplicate: () -> Unit = {},
+    onShare: () -> Unit = {},
     isUserRecipe: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -177,6 +191,15 @@ private fun RecipeListItem(
                         maxLines = 2
                     )
                 }
+            }
+
+            // Share button (shown for all recipes)
+            IconButton(onClick = onShare) {
+                Icon(
+                    Icons.Default.Share,
+                    contentDescription = "Share",
+                    tint = MaterialTheme.colors.secondary
+                )
             }
 
             // Duplicate button (shown for all recipes)

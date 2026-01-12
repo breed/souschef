@@ -1,5 +1,6 @@
 package com.homeofcode.souschef
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +19,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         platform = AndroidPlatform(this)
+
+        // Handle incoming file intents on cold start
+        handleIncomingIntent(intent)
+
         setContent {
             if (intent.action.equals(TIMER_ACTION_INTENT)) {
                 currentBake?.let { bake ->
@@ -35,6 +40,33 @@ class MainActivity : ComponentActivity() {
                     currentBake = bake
                 }
             )
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+
+        when (intent.action) {
+            Intent.ACTION_VIEW -> {
+                // Handle opening a .cooklang file directly
+                intent.data?.let { uri ->
+                    platform?.importRecipeFromUri(uri)
+                }
+            }
+            Intent.ACTION_SEND -> {
+                // Handle receiving a shared file
+                if (intent.type == "text/plain" || intent.type == "application/octet-stream") {
+                    val uri = intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+                    uri?.let {
+                        platform?.importRecipeFromUri(it)
+                    }
+                }
+            }
         }
     }
 }

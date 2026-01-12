@@ -18,6 +18,9 @@ interface Platform {
     fun readUserRecipe(filename: String): String?
     fun writeUserRecipe(filename: String, content: String)
     fun deleteUserRecipe(filename: String): Boolean
+
+    // Sharing
+    fun shareRecipe(title: String, content: String)
 }
 
 expect fun getPlatform(): Platform

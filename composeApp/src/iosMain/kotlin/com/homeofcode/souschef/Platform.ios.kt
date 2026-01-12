@@ -47,6 +47,10 @@ class IOSPlatform: Platform {
         // TODO: Implement iOS recipe storage
         return false
     }
+
+    override fun shareRecipe(title: String, content: String) {
+        // TODO: Implement iOS sharing with UIActivityViewController
+    }
 }
 
 actual fun getPlatform(): Platform = IOSPlatform()

@@ -10,9 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.FileProvider
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toJavaLocalDateTime
@@ -138,6 +140,60 @@ class AndroidPlatform(private val mainActivity: MainActivity) : Platform {
     override fun deleteUserRecipe(filename: String): Boolean {
         val file = java.io.File(recipesDir, filename)
         return file.delete()
+    }
+
+    override fun shareRecipe(title: String, content: String) {
+        // Write content to a temp file in cache directory
+        val sharedDir = java.io.File(mainActivity.cacheDir, "shared_recipes").also { it.mkdirs() }
+        val sanitizedTitle = title.replace(Regex("[^a-zA-Z0-9\\s-]"), "").replace(" ", "-")
+        val tempFile = java.io.File(sharedDir, "$sanitizedTitle.cooklang")
+        tempFile.writeText(content)
+
+        // Get content URI via FileProvider
+        val contentUri: Uri = FileProvider.getUriForFile(
+            mainActivity,
+            "${mainActivity.packageName}.fileprovider",
+            tempFile
+        )
+
+        // Create share intent
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, "$title.cooklang")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        mainActivity.startActivity(Intent.createChooser(shareIntent, "Share Recipe"))
+    }
+
+    fun importRecipeFromUri(uri: Uri): Boolean {
+        return try {
+            val inputStream = mainActivity.contentResolver.openInputStream(uri)
+            if (inputStream != null) {
+                val content = inputStream.bufferedReader().use { it.readText() }
+                inputStream.close()
+
+                // Extract filename from URI or generate one
+                val filename = uri.lastPathSegment?.let {
+                    if (it.endsWith(".cooklang")) it else "$it.cooklang"
+                } ?: "imported-${System.currentTimeMillis()}.cooklang"
+
+                // Use RecipeRegistry to add the recipe
+                RecipeRegistry.addUserRecipe(
+                    RecipeRegistry.generateUniqueFilename(filename.removeSuffix(".cooklang")),
+                    content
+                )
+                toast("Recipe imported successfully!")
+                true
+            } else {
+                toast("Could not read file")
+                false
+            }
+        } catch (e: Exception) {
+            toast("Failed to import recipe: ${e.message}")
+            false
+        }
     }
 }
 
