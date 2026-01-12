@@ -17,7 +17,7 @@ import kotlin.time.Duration
 
 
 @OptIn(ExperimentalResourceApi::class, ExperimentalFileSystem::class)
-class BakeModel {
+class BakeModel(private val recipePath: String, private val recipeId: String) {
     inner class RecipeStep(
         private val cookLangeStep: CookLangStep,
         val startDelay: Duration,
@@ -85,7 +85,7 @@ class BakeModel {
     init {
         val recipeText = runBlocking {
             try {
-                String(Res.readBytes("files/recipe.cooklang"))
+                String(Res.readBytes(recipePath))
             } catch (e: Exception) {
                 e.printStackTrace()
                 "nothing"
@@ -104,9 +104,14 @@ class BakeModel {
         } catch (e: Exception) {
             print("Failed to load state: $e")
         }
+
+        // Only restore state if it's for the same recipe
+        val savedRecipeId = props.getProperty("recipeId")
+        val isMatchingRecipe = savedRecipeId == recipeId
+
         alarmEnabled = mutableStateOf(props.getProperty("alarmEnabled") != "false")
-        startTime = mutableStateOf(propToInstant(props.getProperty("startTime")))
-        currentStep = mutableStateOf(props.getProperty("currentStep")?.toIntOrNull())
+        startTime = mutableStateOf(if (isMatchingRecipe) propToInstant(props.getProperty("startTime")) else null)
+        currentStep = mutableStateOf(if (isMatchingRecipe) props.getProperty("currentStep")?.toIntOrNull() else null)
 
         var startDelay: Duration = Duration.ZERO
         var stepNumber = 0
@@ -117,13 +122,16 @@ class BakeModel {
             RecipeStep(
                 it,
                 startDelay = stepStartDelay,
-                completeTime = mutableStateOf(propToInstant(props.getProperty("completeTime.${stepNumber}"))), /* TODO: from DB */
+                completeTime = mutableStateOf(
+                    if (isMatchingRecipe) propToInstant(props.getProperty("completeTime.${stepNumber}")) else null
+                ),
             )
         }
     }
 
     fun save() {
         val props = Properties()
+        props.setProperty("recipeId", recipeId)
         props.setProperty("alarmEnabled", alarmEnabled.value.toString())
         props.setProperty("startTime", startTime.value?.toEpochMilliseconds().toString())
         props.setProperty("currentStep", currentStep.value?.toString() ?: "null")

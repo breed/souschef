@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -29,7 +31,12 @@ import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun RecipeCard(
-    bake: BakeModel, modifier: Modifier = Modifier
+    bake: BakeModel,
+    modifier: Modifier = Modifier,
+    onBackToList: (() -> Unit)? = null,
+    showPageIndicator: Boolean = false,
+    currentPage: Int = 0,
+    totalPages: Int = 1
 ) {
     var alarmEnabled by remember { bake.alarmEnabled }
     val recipeStartTime by remember { bake.startTime }
@@ -57,6 +64,24 @@ fun RecipeCard(
                 Modifier.fillMaxWidth().onGloballyPositioned { x -> screenWidth = x.size.width },
                 horizontalAlignment = Alignment.Start
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (onBackToList != null) {
+                        TextButton(onClick = onBackToList) {
+                            Text("<- Recipes")
+                        }
+                    }
+                    if (showPageIndicator) {
+                        Text(
+                            text = "${currentPage + 1} / $totalPages",
+                            style = MaterialTheme.typography.caption,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.End
+                        )
+                    }
+                }
                 // TODO: the .8f is such an ugly hack. i need to figure out how to get the width of the text
                 Text(
                     text = bake.title,

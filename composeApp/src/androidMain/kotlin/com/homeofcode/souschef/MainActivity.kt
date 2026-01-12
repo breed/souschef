@@ -12,23 +12,29 @@ const val TIMER_ACTION_INTENT: String = "com.homeofcode.souschef.ACTION_TRIGGER_
 class MainActivity : ComponentActivity() {
     companion object {
         var platform: AndroidPlatform? = null
+        var currentBake: BakeModel? = null
     }
-    var bake: BakeModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         platform = AndroidPlatform(this)
         setContent {
-            if (bake == null) bake = BakeModel()
             if (intent.action.equals(TIMER_ACTION_INTENT)) {
-                if (bake?.alarmEnabled?.value ?: false) {
-                    val nextAlarm = bake?.calculateNextAlarm(now())
-                    if (nextAlarm != null) {
-                        setAlarm(nextAlarm)
+                currentBake?.let { bake ->
+                    if (bake.alarmEnabled.value) {
+                        val nextAlarm = bake.calculateNextAlarm(now())
+                        if (nextAlarm != null) {
+                            setAlarm(nextAlarm)
+                        }
                     }
                 }
                 println("got timer!")
             }
-            App(bake!!)
+            App(
+                onBakeCreated = { bake ->
+                    currentBake = bake
+                }
+            )
         }
     }
 }
@@ -36,6 +42,5 @@ class MainActivity : ComponentActivity() {
 @Preview
 @Composable
 fun AppAndroidPreview() {
-    val bake = BakeModel()
-    App(bake)
+    App()
 }
