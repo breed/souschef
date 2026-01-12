@@ -124,10 +124,22 @@ fun MainPager(
     // Use derivedStateOf to ensure pageCount updates reactively
     val pageCount by remember { derivedStateOf { 1 + activeBakes.size } }
 
+    // Start on the active bake page if one exists, otherwise start on recipe list
+    val initialPage = remember {
+        if (ActiveBakesManager.activeBakes.isNotEmpty()) 1 else 0
+    }
+
     val pagerState = rememberPagerState(
-        initialPage = 0,
+        initialPage = initialPage,
         pageCount = { 1 + ActiveBakesManager.activeBakes.size }
     )
+
+    // Navigate to active bake on initial load if one exists
+    LaunchedEffect(Unit) {
+        if (ActiveBakesManager.activeBakes.isNotEmpty() && pagerState.currentPage == 0) {
+            pagerState.scrollToPage(1)
+        }
+    }
 
     // Track page changes to update current bake for alarms
     LaunchedEffect(pagerState) {
