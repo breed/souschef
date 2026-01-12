@@ -45,6 +45,8 @@ fun timeToUTC(time: Instant): Instant {
 sealed class Screen {
     data object RecipeList : Screen()
     data class RecipeDetail(val recipeId: String) : Screen()
+    data object AddRecipe : Screen()
+    data class EditRecipe(val recipe: RecipeInfo) : Screen()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -53,8 +55,9 @@ sealed class Screen {
 fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.RecipeList) }
 
-    // Load any persisted active bakes on first composition
+    // Load any persisted active bakes and user recipes on first composition
     LaunchedEffect(Unit) {
+        RecipeRegistry.loadUserRecipes()
         ActiveBakesManager.loadPersistedActiveBakes()
     }
 
@@ -66,6 +69,16 @@ fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
                         val bake = ActiveBakesManager.getOrCreateBake(recipe)
                         onBakeCreated?.invoke(bake)
                         currentScreen = Screen.RecipeDetail(recipe.id)
+                    },
+                    onAddRecipe = {
+                        currentScreen = Screen.AddRecipe
+                    },
+                    onEditRecipe = { recipe ->
+                        currentScreen = Screen.EditRecipe(recipe)
+                    },
+                    onDeleteRecipe = { recipe ->
+                        RecipeRegistry.deleteUserRecipe(recipe.id)
+                        ActiveBakesManager.removeBake(recipe.id)
                     }
                 )
             }
@@ -74,6 +87,29 @@ fun App(onBakeCreated: ((BakeModel) -> Unit)? = null) {
                     initialRecipeId = screen.recipeId,
                     onBackToList = { currentScreen = Screen.RecipeList },
                     onBakeCreated = onBakeCreated
+                )
+            }
+            is Screen.AddRecipe -> {
+                RecipeEditor(
+                    onSave = { savedRecipe ->
+                        currentScreen = Screen.RecipeList
+                    },
+                    onCancel = {
+                        currentScreen = Screen.RecipeList
+                    }
+                )
+            }
+            is Screen.EditRecipe -> {
+                RecipeEditor(
+                    existingRecipe = screen.recipe,
+                    onSave = { savedRecipe ->
+                        // Remove old bake if it exists (recipe content may have changed)
+                        ActiveBakesManager.removeBake(screen.recipe.id)
+                        currentScreen = Screen.RecipeList
+                    },
+                    onCancel = {
+                        currentScreen = Screen.RecipeList
+                    }
                 )
             }
         }

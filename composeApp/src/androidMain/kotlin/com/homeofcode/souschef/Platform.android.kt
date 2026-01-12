@@ -114,6 +114,31 @@ class AndroidPlatform(private val mainActivity: MainActivity) : Platform {
     override fun toast(message: String) {
         android.widget.Toast.makeText(mainActivity, message, android.widget.Toast.LENGTH_LONG).show()
     }
+
+    private val recipesDir: java.io.File
+        get() = java.io.File(mainActivity.dataDir, "recipes").also { it.mkdirs() }
+
+    override fun listUserRecipes(): List<String> {
+        return recipesDir.listFiles()
+            ?.filter { it.extension == "cooklang" }
+            ?.map { it.name }
+            ?: emptyList()
+    }
+
+    override fun readUserRecipe(filename: String): String? {
+        val file = java.io.File(recipesDir, filename)
+        return if (file.exists()) file.readText() else null
+    }
+
+    override fun writeUserRecipe(filename: String, content: String) {
+        val file = java.io.File(recipesDir, filename)
+        file.writeText(content)
+    }
+
+    override fun deleteUserRecipe(filename: String): Boolean {
+        val file = java.io.File(recipesDir, filename)
+        return file.delete()
+    }
 }
 
 actual fun getPlatform(): Platform = MainActivity.platform!!

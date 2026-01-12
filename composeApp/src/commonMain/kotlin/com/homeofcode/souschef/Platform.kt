@@ -12,6 +12,12 @@ interface Platform {
     fun readState(): InputStream
     fun writeState(): OutputStream
     fun toast(message: String)
+
+    // Recipe file operations
+    fun listUserRecipes(): List<String>
+    fun readUserRecipe(filename: String): String?
+    fun writeUserRecipe(filename: String, content: String)
+    fun deleteUserRecipe(filename: String): Boolean
 }
 
 expect fun getPlatform(): Platform

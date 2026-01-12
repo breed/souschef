@@ -83,12 +83,19 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
     var currentStep: MutableState<Int?>
 
     init {
-        val recipeText = runBlocking {
-            try {
-                String(Res.readBytes(recipePath))
-            } catch (e: Exception) {
-                e.printStackTrace()
-                "nothing"
+        val recipeText = if (recipePath.startsWith("user:")) {
+            // Load user recipe from platform storage
+            val filename = recipePath.removePrefix("user:")
+            getPlatform().readUserRecipe(filename) ?: "nothing"
+        } else {
+            // Load built-in recipe from resources
+            runBlocking {
+                try {
+                    String(Res.readBytes(recipePath))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    "nothing"
+                }
             }
         }
         recipe = CookLangExtractor(recipeText)
