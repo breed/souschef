@@ -43,6 +43,8 @@ kotlin {
         }
         commonMain {
             dependencies {
+                implementation(libs.multiplatform.markdown.renderer.m3)
+                implementation(libs.androidx.material3)
                 implementation("org.yaml:snakeyaml:2.3")
                 implementation(compose.components.resources)
                 implementation(compose.runtime)

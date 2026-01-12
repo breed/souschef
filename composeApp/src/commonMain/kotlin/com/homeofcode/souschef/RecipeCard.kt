@@ -40,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.m3.Markdown
 import com.homeofcode.souschef.com.homeofcode.souschef.model.BakeModel
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -55,6 +56,17 @@ fun RecipeCard(
     val currentBakeStep by remember { bake.currentStep }
     val now = now()
     val pastDue = bake.pastDue(now)
+
+    // Auto-start the recipe when opened
+    LaunchedEffect(Unit) {
+        if (bake.startTime.value == null) {
+            val startNow = now()
+            bake.start(startNow)
+            if (bake.alarmEnabled.value) {
+                setAlarm(bake.calculateNextAlarm(startNow))
+            }
+        }
+    }
 
     // Load images from platform storage
     val imageBitmaps = remember { mutableStateMapOf<String, ImageBitmap>() }
@@ -177,50 +189,40 @@ fun RecipeCard(
                     style = MaterialTheme.typography.h3,
                     modifier = translucentBg.fillMaxWidth()
                 )
-                val recipeStartTimeNow = recipeStartTime
-                if (recipeStartTimeNow == null) {
-                    Button(
-                        onClick = {
-                            val onClickNow = now()
-                            bake.start(onClickNow)
-                            if (bake.alarmEnabled.value) setAlarm(bake.calculateNextAlarm(onClickNow))
-                        }, modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Start")
-                    }
-                } else {
-                    Column {
-                        Text(
-                            text = "Started at ${
-                                formatInstant(recipeStartTimeNow)
-                            }", textAlign = TextAlign.Right
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "Timer Alarm")
-                            Switch(checked = alarmEnabled, onCheckedChange = {
-                                alarmEnabled = it
-                            })
-                        }
-                        Text(
-                            text = "Next Alarm: ${
-                                formatInstant(nextAlarm)
-                            }", textAlign = TextAlign.Right
-                        )
-                        if (onEndRecipe != null) {
-                            Button(
-                                onClick = { showFinishConfirmation = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Finish Baking")
-                            }
-                        }
-                    }
 
+                Column {
+                    recipeStartTime?.let { startTime ->
+                        Text(
+                            text = "Started at ${formatInstant(startTime)}",
+                            textAlign = TextAlign.Right
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Timer Alarm")
+                        Switch(checked = alarmEnabled, onCheckedChange = {
+                            alarmEnabled = it
+                        })
+                    }
+                    Text(
+                        text = "Next Alarm: ${formatInstant(nextAlarm)}",
+                        textAlign = TextAlign.Right
+                    )
+                    if (onEndRecipe != null) {
+                        Button(
+                            onClick = { showFinishConfirmation = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Finish Baking")
+                        }
+                    }
                 }
                 //Spacer(modifier = Modifier.fillMaxHeight(.2f).fillMaxWidth())
                 Column(
                     modifier = translucentBg.fillMaxWidth().verticalScroll(rememberScrollState())
                 ) {
+                    Markdown(
+                        bake.recipe.meta["description"] as? String ?: "",
+                    )
                     Text(
                         text = "Ingredients",
                         style = MaterialTheme.typography.h4,

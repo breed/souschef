@@ -6,11 +6,11 @@ image: sourdough.png
 
 mix @all purpose or bread flour{400%g}, @whole wheat flour{50%g}, @room temperature water or milk (50/50 works well){350%ml}.
 
-let sit for ~{6%sec} to autolyse.
+let sit for ~{60%min} to autolyse.
 
 add @active sourdough{80%g}, @salt{10%g}.
 
-proof for ~{3%sec}.
+proof for ~{30%min}.
 
 fold dough, proof for ~{30%min}.
 
