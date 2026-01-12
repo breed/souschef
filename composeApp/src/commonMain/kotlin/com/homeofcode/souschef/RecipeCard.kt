@@ -1,6 +1,7 @@
 package com.homeofcode.souschef
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,12 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -31,7 +35,8 @@ import org.jetbrains.compose.resources.painterResource
 @Composable
 fun RecipeCard(
     bake: BakeModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onEndRecipe: (() -> Unit)? = null
 ) {
     var alarmEnabled by remember { bake.alarmEnabled }
     val recipeStartTime by remember { bake.startTime }
@@ -48,6 +53,32 @@ fun RecipeCard(
         } else {
             null
         }
+
+    var showFinishConfirmation by remember { mutableStateOf(false) }
+
+    // Finish baking confirmation dialog
+    if (showFinishConfirmation && onEndRecipe != null) {
+        AlertDialog(
+            onDismissRequest = { showFinishConfirmation = false },
+            title = { Text("Finish Baking") },
+            text = { Text("Are you sure you want to finish baking ${bake.title}?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFinishConfirmation = false
+                        onEndRecipe()
+                    }
+                ) {
+                    Text("Finish")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinishConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     MaterialTheme {
         Box(modifier = modifier) {
@@ -95,12 +126,13 @@ fun RecipeCard(
                                 formatInstant(nextAlarm)
                             }", textAlign = TextAlign.Right
                         )
-                        Button(
-                            onClick = {
-                                bake.restart()
-                            }, modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("New Bake")
+                        if (onEndRecipe != null) {
+                            Button(
+                                onClick = { showFinishConfirmation = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Finish Baking")
+                            }
                         }
                     }
 

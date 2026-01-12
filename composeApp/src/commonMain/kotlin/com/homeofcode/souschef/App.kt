@@ -180,7 +180,14 @@ fun MainPager(
                 if (recipeIndex in currentActiveBakes.indices) {
                     val activeBake = currentActiveBakes[recipeIndex]
                     RecipeCard(
-                        bake = activeBake.bakeModel
+                        bake = activeBake.bakeModel,
+                        onEndRecipe = {
+                            ActiveBakesManager.removeBake(activeBake.recipeInfo.id)
+                            // Navigate to recipe list after closing
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(0)
+                            }
+                        }
                     )
                 }
             }
