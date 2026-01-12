@@ -21,6 +21,19 @@ interface Platform {
 
     // Sharing
     fun shareRecipe(title: String, content: String)
+
+    // Recipe images
+    fun pickImage(onImagePicked: (ByteArray?) -> Unit)
+    fun saveRecipeImage(recipeId: String, imageData: ByteArray): String?
+    fun getRecipeImages(recipeId: String): List<String>
+    fun loadRecipeImage(recipeId: String, imageName: String): ByteArray?
+    fun deleteRecipeImage(recipeId: String, imageName: String): Boolean
+    fun deleteAllRecipeImages(recipeId: String): Boolean
+    fun moveRecipeImages(fromRecipeId: String, toRecipeId: String): Boolean
+
 }
 
 expect fun getPlatform(): Platform
+
+// Platform-specific image decoding
+expect fun decodeImageBytes(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap?

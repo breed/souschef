@@ -51,6 +51,46 @@ class IOSPlatform: Platform {
     override fun shareRecipe(title: String, content: String) {
         // TODO: Implement iOS sharing with UIActivityViewController
     }
+
+    override fun pickImage(onImagePicked: (ByteArray?) -> Unit) {
+        // TODO: Implement iOS image picker
+        onImagePicked(null)
+    }
+
+    override fun saveRecipeImage(recipeId: String, imageData: ByteArray): String? {
+        // TODO: Implement iOS image storage
+        return null
+    }
+
+    override fun getRecipeImages(recipeId: String): List<String> {
+        // TODO: Implement iOS image storage
+        return emptyList()
+    }
+
+    override fun loadRecipeImage(recipeId: String, imageName: String): ByteArray? {
+        // TODO: Implement iOS image storage
+        return null
+    }
+
+    override fun deleteRecipeImage(recipeId: String, imageName: String): Boolean {
+        // TODO: Implement iOS image storage
+        return false
+    }
+
+    override fun deleteAllRecipeImages(recipeId: String): Boolean {
+        // TODO: Implement iOS image storage
+        return false
+    }
+
+    override fun moveRecipeImages(fromRecipeId: String, toRecipeId: String): Boolean {
+        // TODO: Implement iOS image storage
+        return false
+    }
 }
 
 actual fun getPlatform(): Platform = IOSPlatform()
+
+actual fun decodeImageBytes(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? {
+    // TODO: Implement iOS image decoding
+    return null
+}

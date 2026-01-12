@@ -30,20 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-
-// Simple copy icon using path data
-@Composable
-private fun CopyIcon(tint: Color) {
-    Icon(
-        Icons.Default.Add, // Placeholder, we'll use text instead
-        contentDescription = "Duplicate",
-        tint = tint,
-        modifier = Modifier.size(24.dp)
-    )
-}
 
 @Composable
 fun RecipeSelector(
@@ -78,54 +65,21 @@ fun RecipeSelector(
             }
         }
 
-        // User recipes section
-        val userRecipes = RecipeRegistry.recipes.filter { !it.isBuiltIn }
-        if (userRecipes.isNotEmpty()) {
-            Text(
-                text = "My Recipes",
-                style = MaterialTheme.typography.subtitle1,
-                modifier = Modifier.padding(vertical = 8.dp)
+        // All recipes
+        RecipeRegistry.recipes.forEach { recipe ->
+            RecipeListItem(
+                recipe = recipe,
+                onClick = { onRecipeSelected(recipe) },
+                onEdit = { onEditRecipe(recipe) },
+                onDelete = { recipeToDelete = recipe },
+                onDuplicate = { onDuplicateRecipe(recipe) },
+                onShare = {
+                    val content = RecipeRegistry.getRecipeContent(recipe)
+                    if (content != null) {
+                        getPlatform().shareRecipe(recipe.name, content)
+                    }
+                }
             )
-            userRecipes.forEach { recipe ->
-                RecipeListItem(
-                    recipe = recipe,
-                    onClick = { onRecipeSelected(recipe) },
-                    onEdit = { onEditRecipe(recipe) },
-                    onDelete = { recipeToDelete = recipe },
-                    onDuplicate = { onDuplicateRecipe(recipe) },
-                    onShare = {
-                        val content = RecipeRegistry.getRecipeContent(recipe)
-                        if (content != null) {
-                            getPlatform().shareRecipe(recipe.name, content)
-                        }
-                    },
-                    isUserRecipe = true
-                )
-            }
-        }
-
-        // Built-in recipes section
-        val builtInRecipes = RecipeRegistry.recipes.filter { it.isBuiltIn }
-        if (builtInRecipes.isNotEmpty()) {
-            Text(
-                text = if (userRecipes.isNotEmpty()) "Built-in Recipes" else "Recipes",
-                style = MaterialTheme.typography.subtitle1,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-            builtInRecipes.forEach { recipe ->
-                RecipeListItem(
-                    recipe = recipe,
-                    onClick = { onRecipeSelected(recipe) },
-                    onDuplicate = { onDuplicateRecipe(recipe) },
-                    onShare = {
-                        val content = RecipeRegistry.getRecipeContent(recipe)
-                        if (content != null) {
-                            getPlatform().shareRecipe(recipe.name, content)
-                        }
-                    },
-                    isUserRecipe = false
-                )
-            }
         }
     }
 
@@ -162,7 +116,6 @@ private fun RecipeListItem(
     onDelete: () -> Unit = {},
     onDuplicate: () -> Unit = {},
     onShare: () -> Unit = {},
-    isUserRecipe: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -193,7 +146,7 @@ private fun RecipeListItem(
                 }
             }
 
-            // Share button (shown for all recipes)
+            // Share button
             IconButton(onClick = onShare) {
                 Icon(
                     Icons.Default.Share,
@@ -202,7 +155,7 @@ private fun RecipeListItem(
                 )
             }
 
-            // Duplicate button (shown for all recipes)
+            // Duplicate button
             IconButton(onClick = onDuplicate) {
                 Text(
                     text = "copy",
@@ -211,21 +164,22 @@ private fun RecipeListItem(
                 )
             }
 
-            if (isUserRecipe) {
-                IconButton(onClick = onEdit) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = MaterialTheme.colors.primary
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colors.error
-                    )
-                }
+            // Edit button
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit",
+                    tint = MaterialTheme.colors.primary
+                )
+            }
+
+            // Delete button
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colors.error
+                )
             }
         }
     }

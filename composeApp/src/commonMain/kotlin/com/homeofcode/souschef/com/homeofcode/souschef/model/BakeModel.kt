@@ -5,18 +5,13 @@ import androidx.compose.runtime.mutableStateOf
 import com.homeofcode.souschef.CookLangExtractor
 import com.homeofcode.souschef.CookLangStep
 import com.homeofcode.souschef.getPlatform
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
 import okio.ExperimentalFileSystem
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.ExperimentalResourceApi
-import souschef.composeapp.generated.resources.Res
-import souschef.composeapp.generated.resources.compose_multiplatform
 import java.util.Properties
 import kotlin.time.Duration
 
 
-@OptIn(ExperimentalResourceApi::class, ExperimentalFileSystem::class)
+@OptIn(ExperimentalFileSystem::class)
 class BakeModel(private val recipePath: String, private val recipeId: String) {
     inner class RecipeStep(
         private val cookLangeStep: CookLangStep,
@@ -73,34 +68,26 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
     }
 
     val alarmTriggered: MutableState<Boolean> = mutableStateOf(false)
-    val imageDescription: String = "Preview" // TODO: fill in from cooklang zip
+    val imageDescription: String = "Preview"
     val title: String
     var alarmEnabled: MutableState<Boolean>
     val recipe: CookLangExtractor
-    val image: DrawableResource
+    val imageNames: List<String>  // List of image filenames
+    val id: String = recipeId  // Expose the recipe ID
     var startTime: MutableState<Instant?>
     val recipeSteps: List<RecipeStep>
     var currentStep: MutableState<Int?>
 
     init {
-        val recipeText = if (recipePath.startsWith("user:")) {
-            // Load user recipe from platform storage
-            val filename = recipePath.removePrefix("user:")
-            getPlatform().readUserRecipe(filename) ?: "nothing"
-        } else {
-            // Load built-in recipe from resources
-            runBlocking {
-                try {
-                    String(Res.readBytes(recipePath))
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    "nothing"
-                }
-            }
-        }
+        // Load image names from platform storage
+        imageNames = getPlatform().getRecipeImages(recipeId)
+
+        // Load recipe from user storage
+        val filename = recipePath.removePrefix("user:")
+        val recipeText = getPlatform().readUserRecipe(filename) ?: "nothing"
+
         recipe = CookLangExtractor(recipeText)
         title = if (recipe.meta.containsKey("title")) recipe.meta["title"] as String else "No Title"
-        image = Res.drawable.compose_multiplatform
 
         // Initialize from stored state
         val props = Properties()

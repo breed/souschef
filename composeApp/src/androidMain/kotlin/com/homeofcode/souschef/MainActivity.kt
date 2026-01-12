@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.homeofcode.souschef.com.homeofcode.souschef.model.BakeModel
@@ -16,9 +18,18 @@ class MainActivity : ComponentActivity() {
         var currentBake: BakeModel? = null
     }
 
+    // Image picker launcher - must be registered before onCreate
+    private val imagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        platform?.handlePickedImage(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        platform = AndroidPlatform(this)
+        platform = AndroidPlatform(this).also {
+            it.imagePickerLauncher = imagePickerLauncher
+        }
 
         // Handle incoming file intents on cold start
         handleIncomingIntent(intent)

@@ -1,7 +1,11 @@
 package com.homeofcode.souschef
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
@@ -24,18 +32,24 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -73,6 +87,33 @@ fun RecipeEditor(
     var description by remember { mutableStateOf(initialDescription) }
     val steps = remember { mutableStateListOf(*initialSteps.toTypedArray()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Image state - list of image filenames
+    val imageNames = remember { mutableStateListOf<String>() }
+    // Cache of loaded image bitmaps
+    val imageBitmaps = remember { mutableStateMapOf<String, ImageBitmap>() }
+    // Stable temp ID for new recipes (so images are saved to same directory)
+    val tempRecipeId = remember { "temp-${System.currentTimeMillis()}" }
+    // Current recipe ID (existing or temp)
+    val currentRecipeId = existingRecipe?.id ?: tempRecipeId
+
+    // Load existing images when editing
+    LaunchedEffect(existingRecipe) {
+        if (existingRecipe != null) {
+            val existingImages = getPlatform().getRecipeImages(existingRecipe.id)
+            imageNames.clear()
+            imageNames.addAll(existingImages)
+            // Load thumbnails
+            existingImages.forEach { imageName ->
+                val bytes = getPlatform().loadRecipeImage(existingRecipe.id, imageName)
+                if (bytes != null) {
+                    decodeImageBytes(bytes)?.let { bitmap ->
+                        imageBitmaps[imageName] = bitmap
+                    }
+                }
+            }
+        }
+    }
 
     // Ensure at least one empty step exists
     if (steps.isEmpty()) {
@@ -113,6 +154,9 @@ fun RecipeEditor(
                         if (description.isNotBlank()) {
                             appendLine("description: $description")
                         }
+                        if (imageNames.isNotEmpty()) {
+                            appendLine("images: [${imageNames.joinToString(", ") { "\"$it\"" }}]")
+                        }
                         appendLine("---")
                         appendLine()
                         nonEmptySteps.forEachIndexed { index, step ->
@@ -136,7 +180,8 @@ fun RecipeEditor(
                             RecipeRegistry.updateUserRecipe(existingRecipe.id, fullContent)
                         } else {
                             val filename = RecipeRegistry.generateUniqueFilename(title)
-                            RecipeRegistry.addUserRecipe(filename, fullContent)
+                            // Pass temp image ID so images get moved to the actual recipe ID
+                            RecipeRegistry.addUserRecipe(filename, fullContent, tempRecipeId)
                         }
 
                         if (savedRecipe != null) {
@@ -186,6 +231,98 @@ fun RecipeEditor(
                     minLines = 2,
                     maxLines = 3
                 )
+            }
+
+            // Images section
+            item {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Photos",
+                            style = MaterialTheme.typography.h6
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                getPlatform().pickImage { imageBytes ->
+                                    if (imageBytes != null) {
+                                        val savedName = getPlatform().saveRecipeImage(currentRecipeId, imageBytes)
+                                        if (savedName != null) {
+                                            imageNames.add(savedName)
+                                            decodeImageBytes(imageBytes)?.let { bitmap ->
+                                                imageBitmaps[savedName] = bitmap
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add Photo")
+                        }
+                    }
+
+                    if (imageNames.isEmpty()) {
+                        Text(
+                            text = "No photos added yet",
+                            style = MaterialTheme.typography.caption,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        LazyRow(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(imageNames.toList()) { imageName ->
+                                Box(
+                                    modifier = Modifier.size(100.dp)
+                                ) {
+                                    imageBitmaps[imageName]?.let { bitmap ->
+                                        Image(
+                                            bitmap = bitmap,
+                                            contentDescription = imageName,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } ?: Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.LightGray)
+                                    )
+
+                                    // Delete button
+                                    IconButton(
+                                        onClick = {
+                                            getPlatform().deleteRecipeImage(currentRecipeId, imageName)
+                                            imageNames.remove(imageName)
+                                            imageBitmaps.remove(imageName)
+                                        },
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .size(24.dp)
+                                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Remove",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Steps header

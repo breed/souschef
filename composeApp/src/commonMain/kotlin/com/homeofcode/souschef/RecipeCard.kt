@@ -1,13 +1,21 @@
 package com.homeofcode.souschef
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
@@ -16,22 +24,25 @@ import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.homeofcode.souschef.com.homeofcode.souschef.model.BakeModel
-import kotlinx.datetime.Instant
-import kotlinx.datetime.format
-import org.jetbrains.compose.resources.painterResource
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecipeCard(
     bake: BakeModel,
@@ -44,6 +55,21 @@ fun RecipeCard(
     val currentBakeStep by remember { bake.currentStep }
     val now = now()
     val pastDue = bake.pastDue(now)
+
+    // Load images from platform storage
+    val imageBitmaps = remember { mutableStateMapOf<String, ImageBitmap>() }
+    LaunchedEffect(bake.imageNames) {
+        if (bake.imageNames.isNotEmpty()) {
+            bake.imageNames.forEach { imageName ->
+                val bytes = getPlatform().loadRecipeImage(bake.id, imageName)
+                if (bytes != null) {
+                    decodeImageBytes(bytes)?.let { bitmap ->
+                        imageBitmaps[imageName] = bitmap
+                    }
+                }
+            }
+        }
+    }
 
     val nextAlarm =
         // we always want to evaluate this, so use the raw value
@@ -82,15 +108,69 @@ fun RecipeCard(
 
     MaterialTheme {
         Box(modifier = modifier) {
-            val imagePainter = painterResource(bake.image)
-            // Image(imagePainter, contentDescription = bake.imageDescription, modifier = modifier)
             val translucentBg = Modifier.background(Color(0xB0FFFFFF))
             var screenWidth by remember { mutableIntStateOf(0) }
             Column(
                 Modifier.fillMaxWidth().onGloballyPositioned { x -> screenWidth = x.size.width },
                 horizontalAlignment = Alignment.Start
             ) {
-                // TODO: the .8f is such an ugly hack. i need to figure out how to get the width of the text
+                // Display recipe images in carousel
+                if (bake.imageNames.isNotEmpty()) {
+                    val pagerState = rememberPagerState(pageCount = { bake.imageNames.size })
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                    ) {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            val imageName = bake.imageNames[page]
+                            val bitmap = imageBitmaps[imageName]
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = "Recipe photo ${page + 1}",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.LightGray),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Loading...")
+                                }
+                            }
+                        }
+
+                        // Page indicators
+                        if (bake.imageNames.size > 1) {
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                repeat(bake.imageNames.size) { index ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (pagerState.currentPage == index) Color.White
+                                                else Color.White.copy(alpha = 0.5f)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Text(
                     text = bake.title,
                     textAlign = TextAlign.Center,

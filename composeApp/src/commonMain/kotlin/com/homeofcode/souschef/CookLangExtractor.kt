@@ -16,6 +16,17 @@ class CookLangExtractor(var markDown: String) {
     val steps: ArrayList<CookLangStep> = ArrayList()
     var meta: Map<String?, Any?> = emptyMap()
 
+    // Extract images list from metadata
+    val images: List<String>
+        get() {
+            val imagesValue = meta["images"]
+            return when (imagesValue) {
+                is List<*> -> imagesValue.filterIsInstance<String>()
+                is String -> listOf(imagesValue)
+                else -> emptyList()
+            }
+        }
+
     init {
         if (markDown.startsWith("---")) {
             // we have meta data, so lets parse it
