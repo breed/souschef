@@ -1,5 +1,6 @@
 package com.homeofcode.souschef
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -148,6 +149,13 @@ fun MainPager(
             if (page > 0 && page - 1 in currentActiveBakes.indices) {
                 onBakeCreated?.invoke(currentActiveBakes[page - 1].bakeModel)
             }
+        }
+    }
+
+    // Handle back button to go to recipe list when viewing a recipe
+    BackHandler(enabled = pagerState.currentPage > 0) {
+        coroutineScope.launch {
+            pagerState.animateScrollToPage(0)
         }
     }
 
