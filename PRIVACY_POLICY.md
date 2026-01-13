@@ -4,7 +4,7 @@
 
 ## Introduction
 
-SousChef ("we", "our", or "the app") is a baking assistant application that helps you manage and time your recipes. This Privacy Policy explains how we handle information when you use our app.
+SousChef is a baking assistant application that helps you manage and time your recipes. This Privacy Policy explains how we handle information when you use our app.
 
 ## Information Collection and Use
 
@@ -63,7 +63,7 @@ We may update this Privacy Policy from time to time. Any changes will be reflect
 
 If you have any questions about this Privacy Policy, please contact us at:
 
-**Email**: [YOUR_EMAIL_ADDRESS]
+**Email**: hello@s4h.app
 
 ## Your Rights
 
