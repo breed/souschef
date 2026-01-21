@@ -58,6 +58,7 @@ object ActiveBakesManager {
     fun removeBake(recipeId: String) {
         val index = _activeBakes.indexOfFirst { it.recipeInfo.id == recipeId }
         if (index >= 0) {
+            _activeBakes[index].bakeModel.restart()
             _activeBakes.removeAt(index)
         }
     }
