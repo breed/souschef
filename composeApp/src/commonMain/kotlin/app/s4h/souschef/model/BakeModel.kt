@@ -17,9 +17,14 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
         private val cookLangeStep: CookLangStep,
         val startDelay: Duration,
         var completeTime: MutableState<Instant?>,
+        var startTimeOffset: MutableState<Duration>,
+        var durationOffset: MutableState<Duration>,
     ) {
         val duration = cookLangeStep.duration
         val instruction: String get() = cookLangeStep.text
+
+        fun getAdjustedStartDelay(): Duration = startDelay + startTimeOffset.value
+        fun getAdjustedDuration(): Duration? = duration?.plus(durationOffset.value)
     }
 
     fun moveToNextStep() {
@@ -31,13 +36,59 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
         save()
     }
 
+    fun moveToPreviousStep() {
+        var stepIndex = currentStep.value
+        if (stepIndex != null && stepIndex > 0) {
+            stepIndex -= 1
+            recipeSteps[stepIndex].completeTime.value = null
+            currentStep.value = stepIndex
+        }
+        save()
+    }
+
+    fun adjustStepTime(stepIndex: Int, newOffset: Duration) {
+        val step = recipeSteps.getOrNull(stepIndex) ?: return
+        val oldOffset = step.startTimeOffset.value
+        val delta = newOffset - oldOffset
+
+        // Adjust this step and all subsequent steps
+        for (i in stepIndex until recipeSteps.size) {
+            recipeSteps[i].startTimeOffset.value = recipeSteps[i].startTimeOffset.value + delta
+        }
+        save()
+    }
+
+    fun resetStepTime(stepIndex: Int) {
+        val step = recipeSteps.getOrNull(stepIndex) ?: return
+        val delta = -step.startTimeOffset.value
+
+        // Reset this step and cascade to subsequent steps
+        for (i in stepIndex until recipeSteps.size) {
+            recipeSteps[i].startTimeOffset.value = recipeSteps[i].startTimeOffset.value + delta
+        }
+        save()
+    }
+
+    fun adjustStepEndTime(stepIndex: Int, newDurationOffset: Duration) {
+        val step = recipeSteps.getOrNull(stepIndex) ?: return
+        step.durationOffset.value = newDurationOffset
+        save()
+    }
+
+    fun resetStepEndTime(stepIndex: Int) {
+        val step = recipeSteps.getOrNull(stepIndex) ?: return
+        step.durationOffset.value = Duration.ZERO
+        save()
+    }
+
     fun pastDue(now: Instant): List<RecipeStep> {
         if (startTime.value == null) return emptyList()
         val dueList = mutableListOf<RecipeStep>()
         recipeSteps.forEach {
             val baseTime = startTime.value
-            if (baseTime != null && it.duration != null) {
-                val due =  baseTime + it.startDelay + it.duration
+            val adjustedDuration = it.getAdjustedDuration()
+            if (baseTime != null && adjustedDuration != null) {
+                val due = baseTime + it.getAdjustedStartDelay() + adjustedDuration
                 if (due < now && it.completeTime.value == null) {
                     dueList.add(it)
                 }
@@ -50,8 +101,9 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
         val baseTime = startTime.value
         if (baseTime != null) {
             for (step in recipeSteps) {
-                if (step.duration != null) {
-                    val due = baseTime + step.startDelay + step.duration
+                val adjustedDuration = step.getAdjustedDuration()
+                if (adjustedDuration != null) {
+                    val due = baseTime + step.getAdjustedStartDelay() + adjustedDuration
                     if (due > now && step.completeTime.value == null) {
                         return due
                     }
@@ -119,6 +171,12 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
                 completeTime = mutableStateOf(
                     if (isMatchingRecipe) propToInstant(props.getProperty("completeTime.${stepNumber}")) else null
                 ),
+                startTimeOffset = mutableStateOf(
+                    if (isMatchingRecipe) propToDuration(props.getProperty("startTimeOffset.${stepNumber}")) else Duration.ZERO
+                ),
+                durationOffset = mutableStateOf(
+                    if (isMatchingRecipe) propToDuration(props.getProperty("durationOffset.${stepNumber}")) else Duration.ZERO
+                ),
             )
         }
     }
@@ -131,6 +189,8 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
         props.setProperty("currentStep", currentStep.value?.toString() ?: "null")
         recipeSteps.forEachIndexed { index, step ->
             props.setProperty("completeTime.${index + 1}", step.completeTime.value?.toEpochMilliseconds().toString())
+            props.setProperty("startTimeOffset.${index + 1}", step.startTimeOffset.value.toIsoString())
+            props.setProperty("durationOffset.${index + 1}", step.durationOffset.value.toIsoString())
         }
         getPlatform().writeState().use {
             props.save(it, "Bake state")
@@ -141,10 +201,20 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
         return property?.toLongOrNull()?.let { Instant.fromEpochMilliseconds(it) }
     }
 
+    private fun propToDuration(property: String?): Duration {
+        return property?.let {
+            try { Duration.parse(it) } catch (e: Exception) { Duration.ZERO }
+        } ?: Duration.ZERO
+    }
+
     fun restart() {
         startTime.value = null
         currentStep.value = null
-        recipeSteps.forEach { it.completeTime.value = null }
+        recipeSteps.forEach {
+            it.completeTime.value = null
+            it.startTimeOffset.value = Duration.ZERO
+            it.durationOffset.value = Duration.ZERO
+        }
         alarmTriggered.value = false
         save()
     }

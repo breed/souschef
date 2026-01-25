@@ -290,15 +290,6 @@ fun RecipeCard(
                 }
             }
 
-            if (onEndRecipe != null) {
-                Button(
-                    onClick = { showFinishConfirmation = true },
-                    modifier = Modifier.fillMaxWidth().padding(top = 0.dp)
-                ) {
-                    Text("Finish Baking")
-                }
-            }
-
             // Scrollable content area
             Column(
                 modifier = Modifier
@@ -338,13 +329,31 @@ fun RecipeCard(
                 bake.recipeSteps.forEachIndexed { index, step ->
                     RecipeStepItem(
                         step = step,
+                        stepIndex = index,
                         isCurrentStep = {
                             currentBakeStep == index
                         },
+                        isPreviousStep = {
+                            currentBakeStep != null && currentBakeStep!! > 0 && index == currentBakeStep!! - 1
+                        },
                         onClick = { bake.moveToNextStep() },
+                        onUncomplete = { bake.moveToPreviousStep() },
+                        onStartTimeAdjusted = { idx, offset -> bake.adjustStepTime(idx, offset) },
+                        onStartTimeReset = { idx -> bake.resetStepTime(idx) },
+                        onEndTimeAdjusted = { idx, offset -> bake.adjustStepEndTime(idx, offset) },
+                        onEndTimeReset = { idx -> bake.resetStepEndTime(idx) },
                         bakeStartTime = recipeStartTime,
                         modifier = if (step in pastDue) Modifier.background(Color.Red) else Modifier
                     )
+                }
+
+                if (onEndRecipe != null) {
+                    Button(
+                        onClick = { showFinishConfirmation = true },
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 48.dp)
+                    ) {
+                        Text("Finish Baking")
+                    }
                 }
             }
         }

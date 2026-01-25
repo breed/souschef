@@ -258,7 +258,7 @@ fun PageIndicator(
 
 
 fun formatInstant(instant: Instant?): String =
-    if (instant == null) "" else instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    if (instant == null) "" else instant.toLocalDateTime(TimeZone.UTC)
         .toJavaLocalDateTime().format(
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
     )
