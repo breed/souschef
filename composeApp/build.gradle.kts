@@ -79,8 +79,8 @@ android {
         applicationId = "app.s4h.souschef"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
     }
 
     signingConfigs {
