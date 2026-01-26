@@ -1,0 +1,38 @@
+PLAY STORE LISTING FOR SOUSCHEF
+================================
+
+SHORT DESCRIPTION (80 char limit):
+----------------------------------
+Time your baking perfectly with step-by-step recipe timers and smart alarms.
+
+
+FULL DESCRIPTION:
+-----------------
+SousChef is your personal baking assistant that helps you nail the timing on every recipe.
+
+Whether you're making sourdough bread, croissants, or any multi-step baked goods, SousChef keeps track of where you are and alerts you when it's time for the next step.
+
+FEATURES
+
+• Step-by-step recipe timers - Never miss a fold, proof, or bake time
+• Smart alarms - Get notified exactly when each step is due
+• CookLang format - Write recipes in simple, readable markdown
+• Photo gallery - Attach multiple photos to each recipe
+• Works offline - All your recipes stored locally on your device
+• Privacy-first - No accounts, no tracking, no data collection
+
+PERFECT FOR
+
+• Sourdough bakers tracking long fermentation schedules
+• Pastry chefs juggling multiple timed steps
+• Home bakers who want to nail their timing
+• Anyone tired of setting multiple phone timers
+
+HOW IT WORKS
+
+1. Create or import a recipe with timed steps
+2. Start baking and let SousChef track your progress
+3. Get alarms when each step is due
+4. Tap to advance through steps as you complete them
+
+Your recipes, your timing, perfected.
