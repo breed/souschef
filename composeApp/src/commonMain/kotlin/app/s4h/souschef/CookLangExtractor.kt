@@ -1,8 +1,5 @@
 package app.s4h.souschef
 
-import org.yaml.snakeyaml.Yaml
-import java.util.Locale
-import java.util.regex.Pattern
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
@@ -10,6 +7,55 @@ import kotlin.time.toDuration
 data class CookLangIngredient(val name: String, val quantity: Float, val unit: String)
 
 data class CookLangStep(val text: String, val duration: Duration?)
+
+// Simple multiplatform YAML frontmatter parser
+private fun parseYamlFrontmatter(yaml: String): Map<String?, Any?> {
+    val result = mutableMapOf<String?, Any?>()
+    var currentListKey: String? = null
+    var currentList: MutableList<String>? = null
+
+    for (line in yaml.lines()) {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
+
+        // Check for list item
+        if (line.startsWith("  - ") || line.startsWith("- ")) {
+            val value = trimmed.removePrefix("- ").trim()
+            if (currentListKey != null && currentList != null) {
+                currentList.add(value)
+            }
+            continue
+        }
+
+        // Save previous list if exists
+        if (currentListKey != null && currentList != null) {
+            result[currentListKey] = currentList
+            currentListKey = null
+            currentList = null
+        }
+
+        // Parse key: value
+        val colonIdx = trimmed.indexOf(':')
+        if (colonIdx > 0) {
+            val key = trimmed.substring(0, colonIdx).trim()
+            val value = trimmed.substring(colonIdx + 1).trim()
+            if (value.isEmpty()) {
+                // Start of a list
+                currentListKey = key
+                currentList = mutableListOf()
+            } else {
+                result[key] = value
+            }
+        }
+    }
+
+    // Save final list if exists
+    if (currentListKey != null && currentList != null) {
+        result[currentListKey] = currentList
+    }
+
+    return result
+}
 
 class CookLangExtractor(var markDown: String) {
     val ingredients: HashMap<String, CookLangIngredient> = HashMap()
@@ -36,7 +82,7 @@ class CookLangExtractor(var markDown: String) {
             val eolMeta = markDown.indexOf("\n", eoMeta) + 1
             val yamlContent = markDown.substring(eol, eoMeta)
             try {
-                meta = Yaml().load(yamlContent) as Map<String?, Any?>
+                meta = parseYamlFrontmatter(yamlContent)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

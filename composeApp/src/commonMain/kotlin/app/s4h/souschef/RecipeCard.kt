@@ -1,6 +1,5 @@
 package app.s4h.souschef
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -100,7 +99,7 @@ fun RecipeCard(
 
     // Full-screen photo gallery overlay
     if (showPhotoGallery && bake.imageNames.isNotEmpty()) {
-        BackHandler { showPhotoGallery = false }
+        PlatformBackHandler { showPhotoGallery = false }
 
         Box(
             modifier = Modifier

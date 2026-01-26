@@ -54,7 +54,7 @@ object RecipeRegistry {
         runBlocking {
             try {
                 // Copy sourdough recipe content
-                val recipeContent = String(Res.readBytes("files/sourdough.cooklang"))
+                val recipeContent = Res.readBytes("files/sourdough.cooklang").decodeToString()
                 val filename = "sourdough.cooklang"
                 getPlatform().writeUserRecipe(filename, recipeContent)
 

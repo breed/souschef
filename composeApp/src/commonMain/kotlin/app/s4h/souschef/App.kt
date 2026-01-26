@@ -1,6 +1,5 @@
 package app.s4h.souschef
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -38,11 +37,8 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
-import kotlinx.datetime.toJavaLocalDateTime
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.ui.tooling.preview.Preview
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 
 
 fun now(): Instant {
@@ -153,7 +149,7 @@ fun MainPager(
     }
 
     // Handle back button to go to recipe list when viewing a recipe
-    BackHandler(enabled = pagerState.currentPage > 0) {
+    PlatformBackHandler(enabled = pagerState.currentPage > 0) {
         coroutineScope.launch {
             pagerState.animateScrollToPage(0)
         }
@@ -257,11 +253,19 @@ fun PageIndicator(
 }
 
 
-fun formatInstant(instant: Instant?): String =
-    if (instant == null) "" else instant.toLocalDateTime(TimeZone.UTC)
-        .toJavaLocalDateTime().format(
-        DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
-    )
+fun formatInstant(instant: Instant?): String {
+    if (instant == null) return ""
+    val localTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = localTime.hour
+    val minute = localTime.minute
+    val amPm = if (hour < 12) "AM" else "PM"
+    val hour12 = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    return "$hour12:${minute.toString().padStart(2, '0')} $amPm"
+}
 
 @Composable
 fun textWidth(text: String): Dp {

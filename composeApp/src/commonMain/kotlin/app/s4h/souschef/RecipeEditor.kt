@@ -1,5 +1,6 @@
 package app.s4h.souschef
 
+import kotlinx.datetime.Clock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,7 +94,7 @@ fun RecipeEditor(
     // Cache of loaded image bitmaps
     val imageBitmaps = remember { mutableStateMapOf<String, ImageBitmap>() }
     // Stable temp ID for new recipes (so images are saved to same directory)
-    val tempRecipeId = remember { "temp-${System.currentTimeMillis()}" }
+    val tempRecipeId = remember { "temp-${Clock.System.now().toEpochMilliseconds()}" }
     // Current recipe ID (existing or temp)
     val currentRecipeId = existingRecipe?.id ?: tempRecipeId
 

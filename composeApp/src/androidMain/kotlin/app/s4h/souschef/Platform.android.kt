@@ -26,10 +26,7 @@ import java.io.ByteArrayOutputStream
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toJavaLocalDateTime
 import kotlinx.datetime.toLocalDateTime
-import java.io.InputStream
-import java.io.OutputStream
 import java.nio.file.Files
-import java.nio.file.StandardOpenOption
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Calendar
@@ -136,16 +133,14 @@ class AndroidPlatform(private val mainActivity: MainActivity) : Platform {
         return true
     }
 
-    override fun readState(): InputStream {
-        return Files.newInputStream(mainActivity.dataDir.toPath().resolve("state.txt"))
+    override fun readState(): ByteArray? {
+        val path = mainActivity.dataDir.toPath().resolve("state.txt")
+        return if (Files.exists(path)) Files.readAllBytes(path) else null
     }
 
-    override fun writeState(): OutputStream {
-        return Files.newOutputStream(
-            mainActivity.dataDir.toPath().resolve("state.txt"),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING
-        )
+    override fun writeState(data: ByteArray) {
+        val path = mainActivity.dataDir.toPath().resolve("state.txt")
+        Files.write(path, data)
     }
 
     override fun toast(message: String) {

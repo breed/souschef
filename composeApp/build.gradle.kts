@@ -19,7 +19,6 @@ kotlin {
         }
     }
 
-    /*
     listOf(
         iosX64(),
         iosArm64(),
@@ -30,7 +29,6 @@ kotlin {
             isStatic = true
         }
     }
-     */
 
     sourceSets {
         val commonTest by getting {
@@ -41,12 +39,12 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            implementation("org.yaml:snakeyaml:2.3")
         }
         commonMain {
             dependencies {
                 implementation(libs.multiplatform.markdown.renderer.m3)
                 implementation(libs.androidx.material3)
-                implementation("org.yaml:snakeyaml:2.3")
                 implementation(compose.components.resources)
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -57,8 +55,7 @@ kotlin {
                 implementation(libs.androidx.lifecycle.viewmodel)
                 implementation(libs.androidx.lifecycle.runtime.compose)
                 implementation(libs.kotlinx.datetime)
-                implementation("com.squareup.okio:okio-multiplatform:3.0.0-alpha.9")
-                implementation("org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.6.1")
+                implementation("com.squareup.okio:okio:3.9.0")
             }
         }
     }
@@ -85,7 +82,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(keystoreProperties.getProperty("storeFile") ?: "")
+            val storeFilePath = keystoreProperties.getProperty("storeFile")
+            if (!storeFilePath.isNullOrEmpty()) {
+                storeFile = file(storeFilePath)
+            }
             storePassword = keystoreProperties.getProperty("storePassword") ?: ""
             keyAlias = keystoreProperties.getProperty("keyAlias") ?: ""
             keyPassword = keystoreProperties.getProperty("keyPassword") ?: ""

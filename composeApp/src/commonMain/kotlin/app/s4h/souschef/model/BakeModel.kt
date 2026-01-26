@@ -5,13 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import app.s4h.souschef.CookLangExtractor
 import app.s4h.souschef.CookLangStep
 import app.s4h.souschef.getPlatform
+import app.s4h.souschef.parseProperties
+import app.s4h.souschef.writeProperties
 import kotlinx.datetime.Instant
-import okio.ExperimentalFileSystem
-import java.util.Properties
 import kotlin.time.Duration
 
-
-@OptIn(ExperimentalFileSystem::class)
 class BakeModel(private val recipePath: String, private val recipeId: String) {
     inner class RecipeStep(
         private val cookLangeStep: CookLangStep,
@@ -142,22 +140,21 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
         title = if (recipe.meta.containsKey("title")) recipe.meta["title"] as String else "No Title"
 
         // Initialize from stored state
-        val props = Properties()
-        try {
-            getPlatform().readState().use {
-                props.load(it)
-            }
+        val props: Map<String, String> = try {
+            val data = getPlatform().readState()
+            if (data != null) parseProperties(data.decodeToString()) else emptyMap()
         } catch (e: Exception) {
             print("Failed to load state: $e")
+            emptyMap()
         }
 
         // Only restore state if it's for the same recipe
-        val savedRecipeId = props.getProperty("recipeId")
+        val savedRecipeId = props["recipeId"]
         val isMatchingRecipe = savedRecipeId == recipeId
 
-        alarmEnabled = mutableStateOf(props.getProperty("alarmEnabled") != "false")
-        startTime = mutableStateOf(if (isMatchingRecipe) propToInstant(props.getProperty("startTime")) else null)
-        currentStep = mutableStateOf(if (isMatchingRecipe) props.getProperty("currentStep")?.toIntOrNull() else null)
+        alarmEnabled = mutableStateOf(props["alarmEnabled"] != "false")
+        startTime = mutableStateOf(if (isMatchingRecipe) propToInstant(props["startTime"]) else null)
+        currentStep = mutableStateOf(if (isMatchingRecipe) props["currentStep"]?.toIntOrNull() else null)
 
         var startDelay: Duration = Duration.ZERO
         var stepNumber = 0
@@ -169,32 +166,30 @@ class BakeModel(private val recipePath: String, private val recipeId: String) {
                 it,
                 startDelay = stepStartDelay,
                 completeTime = mutableStateOf(
-                    if (isMatchingRecipe) propToInstant(props.getProperty("completeTime.${stepNumber}")) else null
+                    if (isMatchingRecipe) propToInstant(props["completeTime.${stepNumber}"]) else null
                 ),
                 startTimeOffset = mutableStateOf(
-                    if (isMatchingRecipe) propToDuration(props.getProperty("startTimeOffset.${stepNumber}")) else Duration.ZERO
+                    if (isMatchingRecipe) propToDuration(props["startTimeOffset.${stepNumber}"]) else Duration.ZERO
                 ),
                 durationOffset = mutableStateOf(
-                    if (isMatchingRecipe) propToDuration(props.getProperty("durationOffset.${stepNumber}")) else Duration.ZERO
+                    if (isMatchingRecipe) propToDuration(props["durationOffset.${stepNumber}"]) else Duration.ZERO
                 ),
             )
         }
     }
 
     fun save() {
-        val props = Properties()
-        props.setProperty("recipeId", recipeId)
-        props.setProperty("alarmEnabled", alarmEnabled.value.toString())
-        props.setProperty("startTime", startTime.value?.toEpochMilliseconds().toString())
-        props.setProperty("currentStep", currentStep.value?.toString() ?: "null")
+        val props = mutableMapOf<String, String>()
+        props["recipeId"] = recipeId
+        props["alarmEnabled"] = alarmEnabled.value.toString()
+        props["startTime"] = startTime.value?.toEpochMilliseconds().toString()
+        props["currentStep"] = currentStep.value?.toString() ?: "null"
         recipeSteps.forEachIndexed { index, step ->
-            props.setProperty("completeTime.${index + 1}", step.completeTime.value?.toEpochMilliseconds().toString())
-            props.setProperty("startTimeOffset.${index + 1}", step.startTimeOffset.value.toIsoString())
-            props.setProperty("durationOffset.${index + 1}", step.durationOffset.value.toIsoString())
+            props["completeTime.${index + 1}"] = step.completeTime.value?.toEpochMilliseconds().toString()
+            props["startTimeOffset.${index + 1}"] = step.startTimeOffset.value.toIsoString()
+            props["durationOffset.${index + 1}"] = step.durationOffset.value.toIsoString()
         }
-        getPlatform().writeState().use {
-            props.save(it, "Bake state")
-        }
+        getPlatform().writeState(writeProperties(props).encodeToByteArray())
     }
 
     private fun propToInstant(property: String?): Instant? {

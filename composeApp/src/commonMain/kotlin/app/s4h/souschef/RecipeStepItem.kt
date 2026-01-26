@@ -1,6 +1,5 @@
 package app.s4h.souschef
 
-import android.app.TimePickerDialog
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import app.s4h.souschef.model.BakeModel
 import kotlinx.datetime.Instant
@@ -52,36 +50,36 @@ fun RecipeStepItem(
     val stepEndTime = stepStartTime?.plus(step.getAdjustedDuration() ?: Duration.ZERO)
     val numDp = textWidth(" \uD83D\uDC49 ")
 
-    val context = LocalContext.current
+    var showTimePickerMode by remember { mutableStateOf<TimeEditMode?>(null) }
 
-    fun showTimePicker(mode: TimeEditMode) {
+    // Show time picker when requested
+    showTimePickerMode?.let { mode ->
         val editingTime = if (mode == TimeEditMode.START) stepStartTime else stepEndTime
         if (editingTime != null && bakeStartTime != null) {
-            val localTime = editingTime.toLocalDateTime(TimeZone.UTC)
-
-            TimePickerDialog(
-                context,
-                { _, hourOfDay, minute ->
+            val localTime = editingTime.toLocalDateTime(TimeZone.currentSystemDefault())
+            PlatformTimePicker(
+                initialHour = localTime.hour,
+                initialMinute = localTime.minute,
+                onTimePicked = { hourOfDay, minute ->
                     if (mode == TimeEditMode.START) {
                         val originalStartTime = bakeStartTime.plus(step.startDelay)
-                        val originalLocal = originalStartTime.toLocalDateTime(TimeZone.UTC)
+                        val originalLocal = originalStartTime.toLocalDateTime(TimeZone.currentSystemDefault())
                         val originalMinutes = originalLocal.hour * 60 + originalLocal.minute
                         val newMinutes = hourOfDay * 60 + minute
                         val diffMinutes = newMinutes - originalMinutes
                         onStartTimeAdjusted(stepIndex, diffMinutes.minutes)
                     } else {
                         val originalEndTime = bakeStartTime.plus(step.startDelay).plus(step.duration ?: Duration.ZERO)
-                        val originalLocal = originalEndTime.toLocalDateTime(TimeZone.UTC)
+                        val originalLocal = originalEndTime.toLocalDateTime(TimeZone.currentSystemDefault())
                         val originalMinutes = originalLocal.hour * 60 + originalLocal.minute
                         val newMinutes = hourOfDay * 60 + minute
                         val diffMinutes = newMinutes - originalMinutes
                         onEndTimeAdjusted(stepIndex, diffMinutes.minutes)
                     }
+                    showTimePickerMode = null
                 },
-                localTime.hour,
-                localTime.minute,
-                false
-            ).show()
+                onDismiss = { showTimePickerMode = null }
+            )
         }
     }
 
@@ -126,7 +124,7 @@ fun RecipeStepItem(
                     Text(
                         text = formatInstant(stepStartTime),
                         modifier = Modifier.combinedClickable(
-                            onClick = { showTimePicker(TimeEditMode.START) }
+                            onClick = { showTimePickerMode = TimeEditMode.START }
                         )
                     )
                     Text(text = " to ")
@@ -134,7 +132,7 @@ fun RecipeStepItem(
                     Text(
                         text = formatInstant(stepEndTime),
                         modifier = Modifier.combinedClickable(
-                            onClick = { showTimePicker(TimeEditMode.END) }
+                            onClick = { showTimePickerMode = TimeEditMode.END }
                         )
                     )
                 }
