@@ -90,27 +90,49 @@ class AndroidPlatform(private val mainActivity: MainActivity) : Platform {
         }
 
         val alarmManager = mainActivity.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        if (!alarmManager.canScheduleExactAlarms()) {
-            return false
+
+        // Intent for when alarm fires
+        val alarmIntent = Intent(mainActivity, AlarmReceiver::class.java).apply {
+            action = TIMER_ACTION_INTENT
         }
-        val intent = Intent(mainActivity, AlarmReceiver::class.java).apply {
-            setAction(TIMER_ACTION_INTENT)
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            mainActivity, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val alarmPendingIntent = PendingIntent.getBroadcast(
+            mainActivity, 1, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         if (time == null) {
-            alarmManager.cancel(pendingIntent)
+            alarmManager.cancel(alarmPendingIntent)
             return true
         }
-        val localTime = time.toLocalDateTime(TimeZone.currentSystemDefault()).toJavaLocalDateTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
 
-        toast("Alarm set for $localTime")
+        // Check if we can schedule exact alarms
+        if (!alarmManager.canScheduleExactAlarms()) {
+            // Guide user to enable exact alarms in settings
+            toast("Please enable exact alarms for SousChef in Settings")
+            val settingsIntent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${mainActivity.packageName}")
+            }
+            mainActivity.startActivity(settingsIntent)
+            return false
+        }
+
         val triggerAtMillis = time.toEpochMilliseconds()
-        alarmManager.setExact(
-            AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+
+        // Intent to open app when user taps alarm icon in status bar
+        val showIntent = Intent(mainActivity, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val showPendingIntent = PendingIntent.getActivity(
+            mainActivity, 0, showIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        // Use setAlarmClock for better visibility and reliability
+        val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerAtMillis, showPendingIntent)
+        alarmManager.setAlarmClock(alarmClockInfo, alarmPendingIntent)
+
+        val localTime = time.toLocalDateTime(TimeZone.currentSystemDefault()).toJavaLocalDateTime()
+            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+        toast("Alarm set for $localTime")
+
         return true
     }
 
